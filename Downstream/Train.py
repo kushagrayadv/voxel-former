@@ -881,7 +881,7 @@ def main():
                 print(f"Started new wandb run: {wandb.run.path}")
     
     utils.seed_everything(args.seed)
-    data_type = torch.float16  # Change depending on your mixed_precision
+    data_type = torch.bfloat16  # Change depending on your mixed_precision
 
     # Setup multi-GPU training
     local_rank = int(os.getenv('RANK', 0))
