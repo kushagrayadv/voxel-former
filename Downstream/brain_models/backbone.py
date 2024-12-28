@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import DropPath
-from attention import NearestNeighborAttention
-from tome_customize import TokenMerging
+from .attention import NearestNeighborAttention
+from .tome_customize import TokenMerging
 
 from IPython import embed
 

@@ -38,7 +38,7 @@ def seed_everything(seed=0, cudnn_deterministic=True):
         torch.backends.cudnn.deterministic = True
     else:
         ## needs to be False to use conv3D
-        print('Note: not using cudnn.deterministic')
+        logger.info('Note: not using cudnn.deterministic')
 
 def np_to_Image(x):
     if x.ndim==4:
@@ -240,7 +240,7 @@ def mixco_nce(preds, targs, temp=0.1, perm=None, betas=None, select=None, distri
 def count_params(model):
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('param counts:\n{:,} total\n{:,} trainable'.format(total, trainable))
+    logger.info('param counts:\n{:,} total\n{:,} trainable'.format(total, trainable))
     return trainable
     
 def check_loss(loss):
@@ -359,6 +359,7 @@ def soft_cont_loss(student_preds, teacher_preds, teacher_aug_preds, temp=0.125):
     return loss
 
 def save_ckpt(tag, args, model, diffusion_prior, optimizer, lr_scheduler, epoch, losses, test_losses, lrs, accelerator, ckpt_saving=True):
+    # TODO: refactor according to new configuration system
     outdir = os.path.abspath(f'../train_logs/{args.model_name}')
     if not os.path.exists(outdir) and ckpt_saving:
         os.makedirs(outdir,exist_ok=True)
@@ -377,7 +378,7 @@ def save_ckpt(tag, args, model, diffusion_prior, optimizer, lr_scheduler, epoch,
             save_dict['diffusion_prior'] = accelerator.unwrap_model(diffusion_prior).state_dict()
     
         torch.save(save_dict, ckpt_path)
-    print(f"\n---saved {outdir}/{tag} ckpt!---\n")
+    logger.info(f"\n---saved {outdir}/{tag} ckpt!---\n")
 
 def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=None, accelerator=None, tag='last', strict=True):
     """
@@ -407,12 +408,13 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
     lrs = []
     
     # Construct checkpoint path
+    # TODO: Add support for loading from specific checkpoint path
     ckpt_dir = os.path.abspath(f'../train_logs/{args.model_name}')
     ckpt_path = os.path.join(ckpt_dir, f'{tag}.pth')
     
     # If specified checkpoint doesn't exist, try to find latest iteration checkpoint
     if not os.path.exists(ckpt_path):
-        print(f"Checkpoint {ckpt_path} not found, searching for latest iteration checkpoint...")
+        logger.info(f"Checkpoint {ckpt_path} not found, searching for latest iteration checkpoint...")
         if os.path.exists(ckpt_dir):
             # Find all iteration checkpoints
             iter_ckpts = [f for f in os.listdir(ckpt_dir) if f.startswith('iter_') and f.endswith('.pth')]
@@ -421,13 +423,13 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
                 iter_nums = [int(f.split('_')[1].split('.')[0]) for f in iter_ckpts]
                 latest_iter = max(iter_nums)
                 ckpt_path = os.path.join(ckpt_dir, f'iter_{latest_iter}.pth')
-                print(f"Found latest iteration checkpoint: {ckpt_path}")
+                logger.info(f"Found latest iteration checkpoint: {ckpt_path}")
             else:
-                print("No iteration checkpoints found")
+                logger.info("No iteration checkpoints found")
                 return epoch, losses, test_losses, lrs, resumed
     
     if os.path.exists(ckpt_path):
-        print(f"Loading checkpoint from {ckpt_path}")
+        logger.info(f"Loading checkpoint from {ckpt_path}")
         # Load checkpoint on CPU to avoid GPU RAM spike
         ckpt = torch.load(ckpt_path, map_location='cpu')
         diffusion_prior_state_dict = None
@@ -435,11 +437,11 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
             diffusion_prior_state_dict = ckpt['diffusion_prior']
         elif diffusion_prior is not None:
             # raise ValueError("Diffusion prior state not found in checkpoint, but have diffusion prior model")
-            print("Diffusion prior state not found in checkpoint, but have diffusion prior model")
+            logger.info("Diffusion prior state not found in checkpoint, but have diffusion prior model")
         elif diffusion_prior is None and 'diffusion_prior' in ckpt:
             raise ValueError("Diffusion prior state found in checkpoint, but no diffusion prior model")
         else:
-            print("No diffusion prior model")
+            logger.info("No diffusion prior model")
 
         # Load model state
         if accelerator is not None:
@@ -467,7 +469,7 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
         test_losses = ckpt.get('test_losses', [])
         lrs = ckpt.get('lrs', [])
         
-        print(f"Successfully loaded checkpoint from epoch {epoch}")
+        logger.info(f"Successfully loaded checkpoint from epoch {epoch}")
         resumed = True
         
         # Handle wandb logging resume
@@ -484,6 +486,6 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
                     })
         
     else:
-        print(f"No checkpoint found at {ckpt_path}, starting from scratch")
+        logger.info(f"No checkpoint found at {ckpt_path}, starting from scratch")
     
     return epoch, losses, test_losses, lrs, resumed

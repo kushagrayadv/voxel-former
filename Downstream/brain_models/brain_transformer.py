@@ -3,11 +3,10 @@ import torch.nn as nn
 from tqdm import tqdm
 from diffusers.models.vae import Decoder
 
-# Encoder
-# TODO: @chenqian
-class BrainEncoder(nn.Module):
-    ...
-
+# # Encoder
+# # TODO: @chenqian
+# class BrainEncoder(nn.Module):
+#     ...
 
 # Decoder
 
@@ -226,34 +225,52 @@ class BrainDecoder(nn.Module):
 class BrainTransformer(nn.Module):
     def __init__(self, args):
         super(BrainTransformer, self).__init__()
-        
+        # TODO: rename these variables
+        model_args = args.model
         # NAT backbone feature extractor
-        self.brain_nat = BrainEncoder(
-            ... #
+        # TODO: construct BrainEncoder
+        # self.brain_nat = BrainEncoder(
+        #     # ...
+        # )
+        # Example, the Tomer
+        from .backbone import BrainNAT
+        self.brain_nat = BrainNAT(
+            in_chans=1,
+            embed_dim=model_args.encoder_hidden_dim,
+            depth=model_args.nat_depth,
+            num_heads=model_args.num_heads,
+            num_neighbors=model_args.nat_num_neighbors,
+            tome_r=model_args.tome_r,
+            layer_scale_init_value=1e-6,
+            coord_dim=3,
+            omega_0=30,
+            last_n_features=model_args.last_n_features,
+            full_attention=model_args.full_attention,
+            drop_rate=model_args.drop,
+            progressive_dims=model_args.progressive_dims,
+            initial_tokens=model_args.initial_tokens,
+            dim_scale_factor=model_args.dim_scale_factor
         )
         
         # Linear layer to map brain_nat output to clip_emb_dim
-        self.feature_mapper = nn.Linear(self.brain_nat.blocks.final_dim, args.decoder_hidden_dim)
+        self.feature_mapper = nn.Linear(self.brain_nat.blocks.final_dim, model_args.decoder_hidden_dim)
 
         # Brain Network backbone
         self.backbone = BrainDecoder(
-            h=args.decoder_hidden_dim,       # Dimension of brain_nat output
-            out_dim=args.clip_emb_dim,    # Desired output dimension
-            seq_len=args.clip_seq_dim,
-            n_blocks=args.n_blocks_decoder,
-            num_heads=args.num_heads,
-            drop=args.drop,
-            blurry_recon=args.blurry_recon,
-            clip_scale=args.clip_scale,
+            h=model_args.decoder_hidden_dim,       # Dimension of brain_nat output
+            out_dim=model_args.clip_emb_dim,    # Desired output dimension
+            seq_len=model_args.clip_seq_dim,
+            n_blocks=model_args.n_blocks_decoder,
+            num_heads=model_args.num_heads,
+            drop=model_args.drop,
+            blurry_recon=model_args.blurry_recon,
+            clip_scale=args.train.clip_scale,
         )
 
     def forward(self, x, coords):
         # NAT backbone processing
         x = self.brain_nat(x, coords)
         x = self.feature_mapper(x)
-        # Map features to clip_emb_dim
-        # x = self.feature_mapper(x)
-
         # Brain Network processing
         backbone, clip_voxels, blurry_image_enc = self.backbone(x)
         

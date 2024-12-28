@@ -42,11 +42,11 @@ import logging
 logger = logging.getLogger(__name__)  # __name__ = name of the current module
 
 def prepare_data(args, data_type):
-    train_data = MindEye2Dataset(args, data_type, 'train')
+    train_data = MindEye2Dataset(args.data, data_type, 'train')
     train_sampler = SubjectBatchSampler(train_data, args.train.batch_size)
     train_dl = torch.utils.data.DataLoader(train_data, batch_sampler=train_sampler, collate_fn=custom_collate_fn, num_workers=16, pin_memory=True, persistent_workers=True)
 
-    test_data = MindEye2Dataset(args, data_type, 'test')
+    test_data = MindEye2Dataset(args.data, data_type, 'test')
     test_sampler = SubjectBatchSampler(test_data, args.train.batch_size, shuffle=False)
     test_dl = torch.utils.data.DataLoader(test_data, batch_sampler=test_sampler, collate_fn=custom_collate_fn, num_workers=16, pin_memory=True, persistent_workers=True)
 
@@ -60,13 +60,11 @@ def build_model(args, device, data_type):
         output_tokens=True,
         only_tokens=True,
     ).to(device)
-    print("clip_img_embedder")
+    logger.info("clip_img_embedder")
     utils.count_params(clip_img_embedder)
 
-    clip_seq_dim = 256
-    clip_emb_dim = 1664
 
-    if args.train.blurry_recon:
+    if args.model.blurry_recon:
         from diffusers import AutoencoderKL
         autoenc = AutoencoderKL(
             down_block_types=['DownEncoderBlock2D'] * 4,
@@ -102,14 +100,14 @@ def build_model(args, device, data_type):
         std = None
         blur_augs = None
 
-    model = BrainTransformer(args, clip_emb_dim, clip_seq_dim).to(device)
+    model = BrainTransformer(args).to(device)
 
     # Optional Prior Network
     if args.model.use_prior:
-        out_dim = clip_emb_dim
+        out_dim = args.model.clip_emb_dim
         depth = 6
         dim_head = 52
-        heads = clip_emb_dim // 52
+        heads = args.model.clip_emb_dim // 52
         timesteps = 100
         
         prior_network = PriorNetwork(
@@ -118,7 +116,7 @@ def build_model(args, device, data_type):
             dim_head=dim_head,
             heads=heads,
             causal=False,
-            num_tokens=clip_seq_dim,
+            num_tokens=args.model.clip_seq_dim,
             learned_query_mode="pos_emb"
         )
         
@@ -135,11 +133,12 @@ def build_model(args, device, data_type):
     
 
     # model = torch.compile(model)
-    print("model parameters:")
+    # TODO: rename these variables
+    logger.info("model parameters:")
     Model_param = utils.count_params(model)
-    print("model.brain_nat")
+    logger.info("model.brain_nat")
     Brain_nat_param = utils.count_params(model.brain_nat)
-    print("model.backbone")
+    logger.info("model.backbone")
     Backbone_param = utils.count_params(model.backbone)
     param_count_dict = {"Model_param": Model_param, "Brain_nat_param": Brain_nat_param, "Backbone_param": Backbone_param}
     return (
@@ -200,7 +199,7 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
     ])
 
     # Add blurry recon parameters if enabled
-    if args.blurry_recon:
+    if args.model.blurry_recon:
         opt_grouped_parameters.extend([
             {'params': [p for n, p in model.backbone.blin1.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
@@ -235,7 +234,7 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
         )
     elif args.train.lr_scheduler_type == 'cycle':
         total_steps = int(np.floor(args.train.num_epochs * num_iterations_per_epoch))
-        print("total_steps", total_steps)
+        logger.info("total_steps", total_steps)
         lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=max_lr,
@@ -252,10 +251,10 @@ def setup_wandb(args,train_url="", test_url=""):
 
     if int(local_rank) == 0 and wandb_log:
         import wandb
-        print(f"wandb {args.wandb_project} run {args.model_name}")
+        logger.info(f"wandb {args.wandb_project} run {args.model_name}")
         wandb.init(
             entity=args.wandb_entity,
-            id=args.model_name,
+            id=args.instance_dir,
             project=args.wandb_project,
             name=args.model_name,
             config=vars(args),
@@ -280,13 +279,13 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
     clip_scale = args.train.clip_scale
     prior_scale = args.train.prior_scale
     use_image_aug = args.train.use_image_aug
-    blurry_recon = args.train.blurry_recon
+    blurry_recon = args.model.blurry_recon
     use_prior = args.model.use_prior
     model_name = args.model_name
 
     model, optimizer, train_dl, lr_scheduler = accelerator.prepare(model, optimizer, train_dl, lr_scheduler)
 
-    accelerator.print(f"{model_name} starting with epoch {epoch_start} / {num_epochs}")
+    logger.info(f"{model_name} starting with epoch {epoch_start} / {num_epochs}")
     mse = nn.MSELoss()
     l1 = nn.L1Loss()
     soft_loss_temps = utils.cosine_anneal(0.004, 0.0075, num_epochs - int(mixup_pct * num_epochs))
@@ -339,7 +338,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
             with torch.amp.autocast('cuda'):
                 batch_size = voxels.shape[0]
                 if batch_size != args.train.batch_size:
-                    print(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {batch_size}")
+                    logger.info(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {batch_size}")
                     continue
                 optimizer.zero_grad()
                 loss=0.
@@ -500,7 +499,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                 image_idx = image_idx.to(device)
                 # all test samples should be loaded per batch such that test_i should never exceed 0
                 if len(images) != args.train.batch_size:
-                    print(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {len(images)}")
+                    logger.info(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {len(images)}")
                     continue
 
                 # Update progress bar description with current metrics
@@ -670,7 +669,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
         # wait for other GPUs to catch up if needed
         accelerator.wait_for_everyone()
 
-    accelerator.print("\n===Finished!===\n")
+    logger.info("\n===Finished!===\n")
     if ckpt_saving:
         save_ckpt(f'last',args,accelerator.unwrap_model(model),optimizer,lr_scheduler,epoch, losses, test_losses, lrs, accelerator, ckpt_saving=True)
 
@@ -706,9 +705,9 @@ def main(args: DictConfig) -> None:
                     name=args.model_name,
                     id=f"{args.model_name}--{d}",
                     resume="allow",
-                    config=vars(args)
+                    config=OmegaConf.to_container(args, resolve=True)
                 )
-                print(f"Resumed wandb run: {wandb.run.path}")
+                logger.info(f"Resumed wandb run: {wandb.run.path}")
             except wandb.errors.UsageError:
                 # If run doesn't exist, start new one
                 wandb.init(
@@ -717,7 +716,7 @@ def main(args: DictConfig) -> None:
                     name=args.model_name,
                     config=vars(args)
                 )
-                print(f"Started new wandb run: {wandb.run.path}")
+                logger.info(f"Started new wandb run: {wandb.run.path}")
     
     utils.seed_everything(args.train.seed)
     data_type = torch.bfloat16  # Change depending on your mixed_precision
@@ -733,7 +732,7 @@ def main(args: DictConfig) -> None:
     device = accelerator.device
 
     # Data preparation
-    train_dl, test_dl, num_test, num_iterations_per_epoch = prepare_data(args.data, data_type)
+    train_dl, test_dl, num_test, num_iterations_per_epoch = prepare_data(args, data_type)
 
     # Model initialization
     clip_img_embedder, model, diffusion_prior, autoenc, cnx, mean, std, blur_augs, param_count_dict = build_model(args, device, data_type)
@@ -758,9 +757,9 @@ def main(args: DictConfig) -> None:
 
     # Print training status
     if resumed:
-        accelerator.print(f"Resuming training from epoch {epoch_start}")
+        logger.info(f"Resuming training from epoch {epoch_start}")
     else:
-        accelerator.print("Starting new training run")
+        logger.info("Starting new training run")
         epoch_start = 0
 
 

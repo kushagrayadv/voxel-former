@@ -5,6 +5,7 @@
 
 # Whether to use the diffusion prior (True) or just retrieval (False)
 use_prior: false
+blurry_recon: false
 
 # Architecture hyperparams
 n_blocks: 4
@@ -24,3 +25,7 @@ drop: 0.1
 progressive_dims: false
 initial_tokens: 15000
 dim_scale_factor: 1.0
+
+# output
+clip_seq_dim: 256
+clip_emb_dim: 1664

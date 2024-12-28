@@ -8,13 +8,15 @@ defaults:
 
 
 # Logging
-wandb_log: false
+wandb_log: true
 wandb_project: "BRAIN_NAT"
 wandb_entity: "nyu_brain_decoding"
 model_name: "testing"
 
-
+instance_dir: "outputs/${model_name}/${now:%Y-%m-%d_%H-%M-%S}"
 hydra:
+  run:
+    dir: ${instance_dir}
   job_logging:
     version: 1
     disable_existing_loggers: false

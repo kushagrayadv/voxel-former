@@ -24,10 +24,9 @@ mixup_pct: 0.33
 use_image_aug: false
 
 # Blurry reconstruction / contrastive scales
-blurry_recon: false
-blur_scale: 0.5
-clip_scale: 1.0
-prior_scale: 30
+clip_scale: 1.0 # base task
+blur_scale: 0.5 # only applies when model.blurry_recon is true
+prior_scale: 30 # only applies when model.use_prior is true
 
 # Path to optional multi-subject checkpoint for fine-tuning
 multisubject_ckpt: null
