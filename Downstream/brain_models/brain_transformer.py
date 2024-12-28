@@ -1,21 +1,15 @@
-import math
-import os
-import numpy as np
-from torchvision import transforms
 import torch
 import torch.nn as nn
-import PIL
-import clip
-from functools import partial
-import random
-import json
 from tqdm import tqdm
-import utils
-from models import PriorNetwork, BrainDiffusionPrior
 from diffusers.models.vae import Decoder
-import sys
-sys.path.append('../')
-from backbone import BrainNAT
+
+# Encoder
+# TODO: @chenqian
+class BrainEncoder(nn.Module):
+    ...
+
+
+# Decoder
 
 class CrossSelfAttentionLayer(nn.Module):
     def __init__(self,
@@ -120,7 +114,7 @@ class CrossSelfAttentionBlock(nn.Module):
         x = self.projector_2(self.self_attn(x), x)
         return x
     
-class SpatialAwareBrainNetwork(nn.Module):
+class BrainDecoder(nn.Module):
     def __init__(
         self,
         h=4096,
@@ -132,6 +126,7 @@ class SpatialAwareBrainNetwork(nn.Module):
         blurry_recon=True,
         clip_scale=1
     ):
+        # This is nothing more than a QFormer
         super().__init__()
         self.seq_len = seq_len
         self.h = h
@@ -161,26 +156,27 @@ class SpatialAwareBrainNetwork(nn.Module):
         else:
             self.clip_proj = None
 
-        if self.blurry_recon:
-            self.blin1 = nn.Linear(h * seq_len, 4 * 28 * 28, bias=True)
-            self.bdropout = nn.Dropout(.3)
-            self.bnorm = nn.GroupNorm(1, 64)
-            self.bupsampler = Decoder(
-                in_channels=64,
-                out_channels=4,
-                up_block_types=["UpDecoderBlock2D", "UpDecoderBlock2D", "UpDecoderBlock2D"],
-                block_out_channels=[32, 64, 128],
-                layers_per_block=1,
-            )
-            self.b_maps_projector = nn.Sequential(
-                nn.Conv2d(64, 512, 1, bias=False),
-                nn.GroupNorm(1, 512),
-                nn.ReLU(True),
-                nn.Conv2d(512, 512, 1, bias=False),
-                nn.GroupNorm(1, 512),
-                nn.ReLU(True),
-                nn.Conv2d(512, 512, 1, bias=True),
-            )
+        # TODO: next step, more tasks
+        # if self.blurry_recon:
+        #     self.blin1 = nn.Linear(h * seq_len, 4 * 28 * 28, bias=True)
+        #     self.bdropout = nn.Dropout(.3)
+        #     self.bnorm = nn.GroupNorm(1, 64)
+        #     self.bupsampler = Decoder(
+        #         in_channels=64,
+        #         out_channels=4,
+        #         up_block_types=["UpDecoderBlock2D", "UpDecoderBlock2D", "UpDecoderBlock2D"],
+        #         block_out_channels=[32, 64, 128],
+        #         layers_per_block=1,
+        #     )
+        #     self.b_maps_projector = nn.Sequential(
+        #         nn.Conv2d(64, 512, 1, bias=False),
+        #         nn.GroupNorm(1, 512),
+        #         nn.ReLU(True),
+        #         nn.Conv2d(512, 512, 1, bias=False),
+        #         nn.GroupNorm(1, 512),
+        #         nn.ReLU(True),
+        #         nn.Conv2d(512, 512, 1, bias=True),
+        #     )
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -211,85 +207,45 @@ class SpatialAwareBrainNetwork(nn.Module):
         # Initialize blurry reconstruction
         b = torch.zeros((batch_size, 2, 1), device=x.device)
         
-        # Apply blurry reconstruction if enabled
-        if self.blurry_recon:
-            b = self.blin1(x.view(batch_size, -1))
-            b = self.bdropout(b)
-            b = b.reshape(b.shape[0], -1, 7, 7).contiguous()
-            b = self.bnorm(b)
-            b_aux = self.b_maps_projector(b).flatten(2).permute(0, 2, 1)
-            b_aux = b_aux.view(batch_size, 49, 512)
-            b = (self.bupsampler(b), b_aux)
+        # TODO: next step, more tasks
+        # # Apply blurry reconstruction if enabled
+        # if self.blurry_recon:
+        #     b = self.blin1(x.view(batch_size, -1))
+        #     b = self.bdropout(b)
+        #     b = b.reshape(b.shape[0], -1, 7, 7).contiguous()
+        #     b = self.bnorm(b)
+        #     b_aux = self.b_maps_projector(b).flatten(2).permute(0, 2, 1)
+        #     b_aux = b_aux.view(batch_size, 49, 512)
+        #     b = (self.bupsampler(b), b_aux)
 
         return backbone, c, b
     
-    
-class NAT_BrainNet(nn.Module):
-    def __init__(self, args, clip_emb_dim=1664, clip_seq_dim=256):
-        super(NAT_BrainNet, self).__init__()
+
+
+# Transformer
+class BrainTransformer(nn.Module):
+    def __init__(self, args):
+        super(BrainTransformer, self).__init__()
         
         # NAT backbone feature extractor
-        self.brain_nat = BrainNAT(
-            in_chans=1,
-            embed_dim=args.encoder_hidden_dim,
-            depth=args.nat_depth,
-            num_heads=args.num_heads,
-            num_neighbors=args.nat_num_neighbors,
-            tome_r=args.tome_r,
-            layer_scale_init_value=1e-6,
-            coord_dim=3,
-            omega_0=30,
-            last_n_features=args.last_n_features,
-            full_attention=args.full_attention,
-            drop_rate=args.drop,
-            progressive_dims=args.progressive_dims,
-            initial_tokens=args.initial_tokens,
-            dim_scale_factor=args.dim_scale_factor
+        self.brain_nat = BrainEncoder(
+            ... #
         )
         
         # Linear layer to map brain_nat output to clip_emb_dim
         self.feature_mapper = nn.Linear(self.brain_nat.blocks.final_dim, args.decoder_hidden_dim)
 
         # Brain Network backbone
-        self.backbone = SpatialAwareBrainNetwork(
+        self.backbone = BrainDecoder(
             h=args.decoder_hidden_dim,       # Dimension of brain_nat output
-            out_dim=clip_emb_dim,    # Desired output dimension
-            seq_len=clip_seq_dim,
+            out_dim=args.clip_emb_dim,    # Desired output dimension
+            seq_len=args.clip_seq_dim,
             n_blocks=args.n_blocks_decoder,
             num_heads=args.num_heads,
             drop=args.drop,
             blurry_recon=args.blurry_recon,
             clip_scale=args.clip_scale,
         )
-        
-        # Optional Prior Network
-        # if args.use_prior:
-        #     out_dim = clip_emb_dim
-        #     depth = 6
-        #     dim_head = 52
-        #     heads = clip_emb_dim // 52
-        #     timesteps = 100
-            
-        #     prior_network = PriorNetwork(
-        #         dim=out_dim,
-        #         depth=depth,
-        #         dim_head=dim_head,
-        #         heads=heads,
-        #         causal=False,
-        #         num_tokens=clip_seq_dim,
-        #         learned_query_mode="pos_emb"
-        #     )
-            
-        #     self.diffusion_prior = BrainDiffusionPrior(
-        #         net=prior_network,
-        #         image_embed_dim=out_dim,
-        #         condition_on_text_encodings=False,
-        #         timesteps=timesteps,
-        #         cond_drop_prob=0.2,
-        #         image_embed_scale=None,
-        #     )
-        # else:
-        #     self.diffusion_prior = None
 
     def forward(self, x, coords):
         # NAT backbone processing

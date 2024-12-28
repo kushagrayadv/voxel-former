@@ -16,7 +16,12 @@ import requests
 import time 
 from accelerate import Accelerator
 
+import logging
+logger = logging.getLogger(__name__)
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
 
 def is_interactive():
     import __main__ as main

@@ -1,0 +1,37 @@
+# conf/config.yaml
+
+defaults:
+  - _self_
+  - model: main     # this loads 'model/main.yaml'
+  - train: main     # this loads 'train/main.yaml'
+  - data: main      # this loads 'data/main.yaml'
+
+
+# Logging
+wandb_log: false
+wandb_project: "BRAIN_NAT"
+wandb_entity: "nyu_brain_decoding"
+model_name: "testing"
+
+
+hydra:
+  job_logging:
+    version: 1
+    disable_existing_loggers: false
+    formatters:
+      simple:
+        format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        level: INFO
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        level: DEBUG
+        filename: train.log
+    root:
+      level: DEBUG
+      handlers: [file, console]

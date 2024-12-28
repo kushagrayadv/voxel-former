@@ -14,9 +14,8 @@ import utils
 
 from diffusers.models.vae import Decoder
 import sys
-sys.path.append('../')
-from backbone import BrainNAT
 
+# TODO: clean up this file
 class BrainNetwork(nn.Module):
     def __init__(self, h=4096, in_dim=15724, out_dim=768, seq_len=2, n_blocks=4, drop=.15, clip_size=768, blurry_recon=True, clip_scale=1, mixer=True):
         super().__init__()

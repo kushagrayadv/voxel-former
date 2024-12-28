@@ -1,0 +1,33 @@
+# ------------------------------------------------------------------------------
+# Training-related hyperparameters and configurations
+# ------------------------------------------------------------------------------
+
+# General training params
+batch_size: 4
+global_batch_size: null
+num_epochs: 150
+seed: 42
+
+# Learning rate & scheduler
+max_lr: 3.0e-4
+lr_scheduler_type: "cycle"
+
+
+
+# Checkpointing
+ckpt_saving: false
+ckpt_interval: 5
+ckpt_iter: 15000
+
+# Mixup & augmentation
+mixup_pct: 0.33
+use_image_aug: false
+
+# Blurry reconstruction / contrastive scales
+blurry_recon: false
+blur_scale: 0.5
+clip_scale: 1.0
+prior_scale: 30
+
+# Path to optional multi-subject checkpoint for fine-tuning
+multisubject_ckpt: null

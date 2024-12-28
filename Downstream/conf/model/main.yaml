@@ -1,0 +1,26 @@
+# ------------------------------------------------------------------------------
+# Model-related hyperparameters and configurations
+# ------------------------------------------------------------------------------
+
+
+# Whether to use the diffusion prior (True) or just retrieval (False)
+use_prior: false
+
+# Architecture hyperparams
+n_blocks: 4
+decoder_hidden_dim: 1024
+encoder_hidden_dim: 1024
+use_mixer: false
+num_heads: 4
+tome_r: 2000
+last_n_features: 16
+nat_depth: 2
+nat_num_neighbors: 8
+full_attention: false
+n_blocks_decoder: 4
+
+# Dropout and progressive-dim scaling
+drop: 0.1
+progressive_dims: false
+initial_tokens: 15000
+dim_scale_factor: 1.0

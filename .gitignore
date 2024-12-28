@@ -70,3 +70,5 @@ slurm-logs/
 slurm-raw/
 cache_dir/
 **/plots/
+
+Downstream/outputs/

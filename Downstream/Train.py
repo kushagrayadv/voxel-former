@@ -12,7 +12,8 @@ import h5py
 from tqdm import tqdm
 import webdataset as wds
 import wandb
-
+import hydra
+from omegaconf import DictConfig, OmegaConf
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
@@ -21,8 +22,7 @@ from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 import kornia
 from kornia.augmentation.container import AugmentationSequential
-# from models import NAT_BrainNe
-from attention_decoders import NAT_BrainNet
+from brain_models.brain_transformer import BrainTransformer
 # Add the path for SDXL unCLIP requirements
 sys.path.append('generative_models/')
 import sgm
@@ -36,188 +36,21 @@ import utils
 from utils import save_ckpt
 from dataset import MindEye2Dataset, SubjectBatchSampler, custom_collate_fn
 import re
-from models import PriorNetwork, BrainDiffusionPrior
+from brain_models.models import PriorNetwork, BrainDiffusionPrior
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Model Training Configuration")
-    parser.add_argument(
-        "--model_name", type=str, default="testing",
-        help="Name of the model, used for checkpoint saving and wandb logging (if enabled)",
-    )
-    parser.add_argument(
-        "--data_path", type=str, default='/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2',#os.getcwd(),
-        help="Path to where NSD data is stored or where to download it",
-    )
-    parser.add_argument(
-        "--cache_dir", type=str, default='/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2',#os.getcwd(),
-        help="Path to where miscellaneous files downloaded from huggingface are stored. Defaults to current directory.",
-    )
-    #TODO: We gonna validate on all the subjects in the ideal case since we are doing multi-subject stuff.
-    # held-out subject
-    parser.add_argument(
-        "--subj", type=int, default=1, choices=[1, 2, 3, 4, 5, 6, 7, 8],
-        help="Validate on which subject?",
-    )
-    parser.add_argument(
-        "--multisubject_ckpt", type=str, default=None,
-        help="Path to pre-trained multisubject model to finetune a single subject from. multisubject must be False.",
-    )
-    parser.add_argument(
-        "--num_sessions", type=int, default=1,
-        help="Number of training sessions to include",
-    )
-    parser.add_argument(
-        "--use_prior", action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to train diffusion prior (True) or just rely on retrieval part of the pipeline (False)",
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=4,
-        help="Batch size can be increased by 10x if only training retrieval submodule and not diffusion prior",
-    )
-    parser.add_argument(
-        "--wandb_log", action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to log to wandb",
-    )
-    parser.add_argument(
-        "--wandb_project", type=str, default="BRAIN_NAT",
-        help="wandb project name",
-    )
-    parser.add_argument(
-        "--mixup_pct", type=float, default=.33,
-        help="Proportion of way through training when to switch from BiMixCo to SoftCLIP",
-    )
-    parser.add_argument(
-        "--blurry_recon", action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to output blurry reconstructions",
-    )
-    parser.add_argument(
-        "--blur_scale", type=float, default=.5,
-        help="Multiply loss from blurry recons by this number",
-    )
-    parser.add_argument(
-        "--clip_scale", type=float, default=1.,
-        help="Multiply contrastive loss by this number",
-    )
-    parser.add_argument(
-        "--prior_scale", type=float, default=30,
-        help="Multiply diffusion prior loss by this",
-    )
-    parser.add_argument(
-        "--use_image_aug", action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to use image augmentation",
-    )
-    parser.add_argument(
-        "--num_epochs", type=int, default=150,
-        help="Number of epochs of training",
-    )
-    parser.add_argument(
-        "--multi_subject",type=lambda x: [int(i) for i in x.split(',')],
-        default="1,2,5,7",#[1,2,3,4,5,6,7,8],
-        help="List of subjects to use for multi-subject training",
-    )
-    parser.add_argument(
-        "--new_test", action=argparse.BooleanOptionalAction, default=True,
-        help="Whether to use the new test set",
-    )
-    parser.add_argument(
-        "--n_blocks", type=int, default=4,
-        help="Number of blocks in the model",
-    )
-    parser.add_argument(
-        "--decoder_hidden_dim", type=int, default=1024, #todo Try 512
-        help="Hidden dimension size",
-    )
-    parser.add_argument(
-        "--encoder_hidden_dim", type=int, default=1024, #todo Try 512
-        help="Hidden dimension size",
-    )
-    parser.add_argument(
-        "--lr_scheduler_type", type=str, default='cycle', choices=['cycle', 'linear'],
-        help="Type of learning rate scheduler",
-    )
-    parser.add_argument(
-        "--ckpt_saving", action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to save checkpoints",
-    )
-    parser.add_argument(
-        "--ckpt_interval", type=int, default=5,
-        help="Save backup checkpoint and reconstruct every x epochs",
-    )
-    parser.add_argument(
-        "--ckpt_iter", type=int, default=15000,
-        help="Save backup checkpoint and reconstruct every x iterations",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42,
-        help="Random seed",
-    )
-    parser.add_argument(
-        "--max_lr", type=float, default=3e-4,
-        help="Maximum learning rate",
-    )
-    parser.add_argument(
-        "--use_mixer", action=argparse.BooleanOptionalAction, default=False,
-        help="Whether to use the mixer",
-    )
-    parser.add_argument(
-        "--num_heads", type=int, default=4,
-        help="Number of attention heads in BrainNAT",
-    )
-    parser.add_argument(
-        "--tome_r", type=int, default=2000,
-        help="Token merging ratio for BrainNAT",
-    )
-    parser.add_argument(
-        "--last_n_features", type=int, default=16,
-        help="Number of features in the last layer of BrainNAT",
-    )
-    parser.add_argument(
-        "--nat_depth", type=int, default=2,
-        help="Depth of the BrainNAT model",
-    )
-    parser.add_argument(
-        "--nat_num_neighbors", type=int, default=8,
-        help="Number of neighbors in BrainNAT",
-    )
-    parser.add_argument(
-        "--full_attention", action="store_true",
-        help="Whether to use full attention in BrainNAT",
-    )
-    parser.add_argument(
-        "--n_blocks_decoder", type=int, default=4,
-        help="Number of blocks in the decoder",
-    )
-    parser.add_argument(
-        "--drop", type=float, default=0.1,
-        help="Dropout rate for the model",
-    )
-    parser.add_argument(
-        "--progressive_dims", action="store_true",
-        help="Whether to use progressive dimension scaling",
-    )
-    parser.add_argument(
-        "--initial_tokens", type=int, default=15000,
-        help="Initial number of tokens for progressive dimension scaling",
-    )
-    parser.add_argument(
-        "--dim_scale_factor", type=float, default=1.0,
-        help="Power factor for dimension scaling (0.5 = square root scaling)",
-    )
-    args = parser.parse_args()
-    return args
-
-
+import logging
+logger = logging.getLogger(__name__)  # __name__ = name of the current module
 
 def prepare_data(args, data_type):
     train_data = MindEye2Dataset(args, data_type, 'train')
-    train_sampler = SubjectBatchSampler(train_data, args.batch_size)
+    train_sampler = SubjectBatchSampler(train_data, args.train.batch_size)
     train_dl = torch.utils.data.DataLoader(train_data, batch_sampler=train_sampler, collate_fn=custom_collate_fn, num_workers=16, pin_memory=True, persistent_workers=True)
 
     test_data = MindEye2Dataset(args, data_type, 'test')
-    test_sampler = SubjectBatchSampler(test_data, args.batch_size, shuffle=False)
+    test_sampler = SubjectBatchSampler(test_data, args.train.batch_size, shuffle=False)
     test_dl = torch.utils.data.DataLoader(test_data, batch_sampler=test_sampler, collate_fn=custom_collate_fn, num_workers=16, pin_memory=True, persistent_workers=True)
 
-    num_iterations_per_epoch = len(train_data) // args.batch_size
+    num_iterations_per_epoch = len(train_data) // args.train.batch_size
     return train_dl, test_dl, len(test_data), num_iterations_per_epoch
 
 def build_model(args, device, data_type):
@@ -233,7 +66,7 @@ def build_model(args, device, data_type):
     clip_seq_dim = 256
     clip_emb_dim = 1664
 
-    if args.blurry_recon:
+    if args.train.blurry_recon:
         from diffusers import AutoencoderKL
         autoenc = AutoencoderKL(
             down_block_types=['DownEncoderBlock2D'] * 4,
@@ -242,13 +75,13 @@ def build_model(args, device, data_type):
             layers_per_block=2,
             sample_size=256,
         ).to(device)
-        ckpt = torch.load(f'{args.cache_dir}/sd_image_var_autoenc.pth', map_location=device)
+        ckpt = torch.load(f'{args.data.cache_dir}/sd_image_var_autoenc.pth', map_location=device)
         autoenc.load_state_dict(ckpt)
         autoenc.eval()
         autoenc.requires_grad_(False)
 
         from autoencoder.convnext import ConvnextXL
-        cnx = ConvnextXL(f'{args.cache_dir}/convnext_xlarge_alpha0.75_fullckpt.pth').to(device)
+        cnx = ConvnextXL(f'{args.data.cache_dir}/convnext_xlarge_alpha0.75_fullckpt.pth').to(device)
         cnx.requires_grad_(False)
         cnx.eval()
 
@@ -269,10 +102,10 @@ def build_model(args, device, data_type):
         std = None
         blur_augs = None
 
-    model = NAT_BrainNet(args, clip_emb_dim, clip_seq_dim).to(device)
+    model = BrainTransformer(args, clip_emb_dim, clip_seq_dim).to(device)
 
     # Optional Prior Network
-    if args.use_prior:
+    if args.model.use_prior:
         out_dim = clip_emb_dim
         depth = 6
         dim_head = 52
@@ -322,8 +155,9 @@ def build_model(args, device, data_type):
     )
 
 def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
+    # TODO: clean up here
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    max_lr = args.max_lr
+    max_lr = args.train.max_lr
 
     # Group parameters for NAT backbone
     opt_grouped_parameters = [
@@ -383,7 +217,7 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
         ])
 
     # Add prior network parameters if enabled
-    if args.use_prior:
+    if args.model.use_prior:
         opt_grouped_parameters.extend([
             {'params': [p for n, p in diffusion_prior.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
@@ -393,21 +227,21 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
 
     optimizer = torch.optim.AdamW(opt_grouped_parameters, lr=max_lr)
 
-    if args.lr_scheduler_type == 'linear':
+    if args.train.lr_scheduler_type == 'linear':
         lr_scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
-            total_iters=int(np.floor(args.num_epochs * num_iterations_per_epoch)),
+            total_iters=int(np.floor(args.train.num_epochs * num_iterations_per_epoch)),
             last_epoch=-1
         )
-    elif args.lr_scheduler_type == 'cycle':
-        total_steps = int(np.floor(args.num_epochs * num_iterations_per_epoch))
+    elif args.train.lr_scheduler_type == 'cycle':
+        total_steps = int(np.floor(args.train.num_epochs * num_iterations_per_epoch))
         print("total_steps", total_steps)
         lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=max_lr,
             total_steps=total_steps,
             final_div_factor=1000,
-            last_epoch=-1, pct_start=2 / args.num_epochs
+            last_epoch=-1, pct_start=2 / args.train.num_epochs
         )
     return optimizer, lr_scheduler
 
@@ -420,7 +254,7 @@ def setup_wandb(args,train_url="", test_url=""):
         import wandb
         print(f"wandb {args.wandb_project} run {args.model_name}")
         wandb.init(
-            entity='nyu_brain_decoding',
+            entity=args.wandb_entity,
             id=args.model_name,
             project=args.wandb_project,
             name=args.model_name,
@@ -432,22 +266,22 @@ def setup_wandb(args,train_url="", test_url=""):
     return wandb_log
 
 
-def train(args, model, diffusion_prior, train_dl, test_dl, accelerator, data_type, num_iterations_per_epoch,
+def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerator, data_type, num_iterations_per_epoch,
           num_test, subj_list, clip_img_embedder, optimizer, lr_scheduler, wandb_log, autoenc, cnx, mean, std,
           blur_augs, epoch_start=0, losses=None, test_losses=None, lrs=None):
     
     device = accelerator.device
-    num_epochs = args.num_epochs
-    batch_size = args.batch_size
-    ckpt_interval = args.ckpt_interval
-    ckpt_saving = args.ckpt_saving
-    mixup_pct = args.mixup_pct
-    blur_scale = args.blur_scale
-    clip_scale = args.clip_scale
-    prior_scale = args.prior_scale
-    use_image_aug = args.use_image_aug
-    blurry_recon = args.blurry_recon
-    use_prior = args.use_prior
+    num_epochs = args.train.num_epochs
+    batch_size = args.train.batch_size
+    ckpt_interval = args.train.ckpt_interval
+    ckpt_saving = args.train.ckpt_saving
+    mixup_pct = args.train.mixup_pct
+    blur_scale = args.train.blur_scale
+    clip_scale = args.train.clip_scale
+    prior_scale = args.train.prior_scale
+    use_image_aug = args.train.use_image_aug
+    blurry_recon = args.train.blurry_recon
+    use_prior = args.model.use_prior
     model_name = args.model_name
 
     model, optimizer, train_dl, lr_scheduler = accelerator.prepare(model, optimizer, train_dl, lr_scheduler)
@@ -504,8 +338,8 @@ def train(args, model, diffusion_prior, train_dl, test_dl, accelerator, data_typ
             loss_blurry_cont_per_iter = 0
             with torch.amp.autocast('cuda'):
                 batch_size = voxels.shape[0]
-                if batch_size != args.batch_size:
-                    print(f"Warning: Batch size mismatch. Expected {args.batch_size}, got {batch_size}")
+                if batch_size != args.train.batch_size:
+                    print(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {batch_size}")
                     continue
                 optimizer.zero_grad()
                 loss=0.
@@ -620,7 +454,7 @@ def train(args, model, diffusion_prior, train_dl, test_dl, accelerator, data_typ
                 losses.append(loss.item())
                 lrs.append(optimizer.param_groups[0]['lr'])
 
-                if args.lr_scheduler_type is not None:
+                if args.train.lr_scheduler_type is not None:
                     lr_scheduler.step()
 
                 if accelerator.is_main_process and wandb_log:
@@ -638,7 +472,7 @@ def train(args, model, diffusion_prior, train_dl, test_dl, accelerator, data_typ
                 iteration += 1
                 global_iteration += 1
                 if accelerator.is_main_process:
-                    if global_iteration % args.ckpt_iter == 0 and ckpt_saving:
+                    if global_iteration % args.train.ckpt_iter == 0 and ckpt_saving:
                         save_ckpt(f'iter_{global_iteration}',
                                   args,
                                   accelerator.unwrap_model(model),
@@ -665,8 +499,8 @@ def train(args, model, diffusion_prior, train_dl, test_dl, accelerator, data_typ
                 coords = coords.to(device)
                 image_idx = image_idx.to(device)
                 # all test samples should be loaded per batch such that test_i should never exceed 0
-                if len(images) != args.batch_size:
-                    print(f"Warning: Batch size mismatch. Expected {args.batch_size}, got {len(images)}")
+                if len(images) != args.train.batch_size:
+                    print(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {len(images)}")
                     continue
 
                 # Update progress bar description with current metrics
@@ -840,10 +674,10 @@ def train(args, model, diffusion_prior, train_dl, test_dl, accelerator, data_typ
     if ckpt_saving:
         save_ckpt(f'last',args,accelerator.unwrap_model(model),optimizer,lr_scheduler,epoch, losses, test_losses, lrs, accelerator, ckpt_saving=True)
 
-def main():
+@hydra.main(config_path="conf", config_name="config")
+def main(args: DictConfig) -> None:
     torch._dynamo.config.optimize_ddp=False
-    args = parse_arguments()
-    
+
     # Initialize accelerator first
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
@@ -853,7 +687,12 @@ def main():
         dynamo_backend="no",
         kwargs_handlers=[kwargs]
     )
-    
+
+    if accelerator.is_main_process:            
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.ERROR)
+
     # Set up wandb only on main process
     if accelerator.is_main_process:
         if args.wandb_log:
@@ -862,7 +701,7 @@ def main():
             try:
                 d = time.strftime("%Y_%m_%d_%H_%M_%S", )
                 wandb.init(
-                    entity='nyu_brain_decoding',
+                    entity=args.wandb_entity,
                     project=args.wandb_project,
                     name=args.model_name,
                     id=f"{args.model_name}--{d}",
@@ -873,27 +712,28 @@ def main():
             except wandb.errors.UsageError:
                 # If run doesn't exist, start new one
                 wandb.init(
-                    entity='nyu_brain_decoding',
+                    entity=args.wandb_entity,
                     project=args.wandb_project,
                     name=args.model_name,
                     config=vars(args)
                 )
                 print(f"Started new wandb run: {wandb.run.path}")
     
-    utils.seed_everything(args.seed)
+    utils.seed_everything(args.train.seed)
     data_type = torch.bfloat16  # Change depending on your mixed_precision
 
     # Setup multi-GPU training
     local_rank = int(os.getenv('RANK', 0))
-    num_devices = torch.cuda.device_count()
-    if num_devices == 0:
-        num_devices = 1
-    args.num_devices = num_devices
+    # num_devices = torch.cuda.device_count()
+    # if num_devices == 0:
+    #     num_devices = 1
+    # args.num_devices = num_devices
+    # args.train['global_batch_size'] = args.train.batch_size * accelerator.num_processes
+    args.train.global_batch_size = args.train.batch_size * accelerator.num_processes
     device = accelerator.device
-    batch_size = args.batch_size
 
     # Data preparation
-    train_dl, test_dl, num_test, num_iterations_per_epoch = prepare_data(args, data_type)
+    train_dl, test_dl, num_test, num_iterations_per_epoch = prepare_data(args.data, data_type)
 
     # Model initialization
     clip_img_embedder, model, diffusion_prior, autoenc, cnx, mean, std, blur_augs, param_count_dict = build_model(args, device, data_type)
@@ -923,6 +763,9 @@ def main():
         accelerator.print("Starting new training run")
         epoch_start = 0
 
+
+    logger.info(f"Accelerator: {accelerator}")
+    logger.info(f"args: {OmegaConf.to_yaml(args, resolve=True)}")
     # Training loop
     train(
         args=args,
@@ -934,7 +777,7 @@ def main():
         data_type=data_type,
         num_iterations_per_epoch=num_iterations_per_epoch,
         num_test=num_test,
-        subj_list=[args.subj],
+        subj_list=[args.data.subj],
         clip_img_embedder=clip_img_embedder,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
