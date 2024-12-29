@@ -7,11 +7,11 @@ data_path: "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
 cache_dir: "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
 
 # Subject and session info
-subj: 1
-num_sessions: 1
+subj: 2
+num_sessions: 40
 
 # Multi-subject (list of subject IDs)
-multi_subject: [1, 2, 5, 7]
+multi_subject: [2, 3, 4, 5, 6, 7, 8]
 
 # Whether to use the new test set
 new_test: true

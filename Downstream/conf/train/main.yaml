@@ -2,21 +2,25 @@
 # Training-related hyperparameters and configurations
 # ------------------------------------------------------------------------------
 
+# Whether to use the diffusion prior (True) or just retrieval (False)
+use_prior: true
+blurry_recon: false
+
 # General training params
-batch_size: 4
+batch_size: 16
 global_batch_size: null
 num_epochs: 150
 seed: 42
 
 # Learning rate & scheduler
-max_lr: 3.0e-4
+max_lr: 5.0e-05
 lr_scheduler_type: "cycle"
 
 
 
 # Checkpointing
-ckpt_saving: false
-ckpt_interval: 5
+ckpt_saving: true
+ckpt_interval: 3
 ckpt_iter: 15000
 
 # Mixup & augmentation

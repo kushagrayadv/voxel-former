@@ -263,7 +263,7 @@ class BrainTransformer(nn.Module):
             n_blocks=model_args.n_blocks_decoder,
             num_heads=model_args.num_heads,
             drop=model_args.drop,
-            blurry_recon=model_args.blurry_recon,
+            blurry_recon=args.train.blurry_recon,
             clip_scale=args.train.clip_scale,
         )
 

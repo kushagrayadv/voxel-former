@@ -64,7 +64,7 @@ def build_model(args, device, data_type):
     utils.count_params(clip_img_embedder)
 
 
-    if args.model.blurry_recon:
+    if args.train.blurry_recon:
         from diffusers import AutoencoderKL
         autoenc = AutoencoderKL(
             down_block_types=['DownEncoderBlock2D'] * 4,
@@ -103,7 +103,7 @@ def build_model(args, device, data_type):
     model = BrainTransformer(args).to(device)
 
     # Optional Prior Network
-    if args.model.use_prior:
+    if args.train.use_prior:
         out_dim = args.model.clip_emb_dim
         depth = 6
         dim_head = 52
@@ -199,7 +199,7 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
     ])
 
     # Add blurry recon parameters if enabled
-    if args.model.blurry_recon:
+    if args.train.blurry_recon:
         opt_grouped_parameters.extend([
             {'params': [p for n, p in model.backbone.blin1.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
@@ -216,7 +216,7 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
         ])
 
     # Add prior network parameters if enabled
-    if args.model.use_prior:
+    if args.train.use_prior:
         opt_grouped_parameters.extend([
             {'params': [p for n, p in diffusion_prior.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
@@ -234,7 +234,7 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
         )
     elif args.train.lr_scheduler_type == 'cycle':
         total_steps = int(np.floor(args.train.num_epochs * num_iterations_per_epoch))
-        logger.info("total_steps", total_steps)
+        logger.info(f"total_steps {total_steps}")
         lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=max_lr,
@@ -279,8 +279,8 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
     clip_scale = args.train.clip_scale
     prior_scale = args.train.prior_scale
     use_image_aug = args.train.use_image_aug
-    blurry_recon = args.model.blurry_recon
-    use_prior = args.model.use_prior
+    blurry_recon = args.train.blurry_recon
+    use_prior = args.train.use_prior
     model_name = args.model_name
 
     model, optimizer, train_dl, lr_scheduler = accelerator.prepare(model, optimizer, train_dl, lr_scheduler)
