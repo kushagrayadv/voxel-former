@@ -698,12 +698,11 @@ def main(args: DictConfig) -> None:
             import wandb
             # Try to resume wandb run if it exists
             try:
-                d = time.strftime("%Y_%m_%d_%H_%M_%S", )
                 wandb.init(
                     entity=args.wandb_entity,
                     project=args.wandb_project,
                     name=args.model_name,
-                    id=f"{args.model_name}--{d}",
+                    id=args.instance_dir.replace('/', '--'),
                     resume="allow",
                     config=OmegaConf.to_container(args, resolve=True)
                 )

@@ -10,4 +10,11 @@ echo MASTER_PORT=${MASTER_PORT}
 echo WORLD_SIZE=${COUNT_NODE}
 export SSL_CERT_FILE=/scratch/yz10381/CODES/IVP/Brain_Decoding/tmp/cacert.pem
 # accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT} --mixed_precision=bf16 Train.py
-accelerate launch --num_processes=2 --main_process_port=29500 --mixed_precision=bf16 Train.py
+accelerate launch --num_processes=2 --main_process_port=29500 --mixed_precision=bf16 Train.py $@ # first run
+
+# Resume running
+# accelerate launch --num_processes=2 --main_process_port=29501 --mixed_precision=bf16 Train.py --config-dir ${instance_dir}/.hydra \
+#     'hydra.job_logging.handlers.file.filename=train.log' \
+#     "instance_dir=${instance_dir}" \
+#     'hydra.run.dir=${instance_dir}' \
+#     $@ # resume running
