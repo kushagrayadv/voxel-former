@@ -388,7 +388,8 @@ def main(args: DictConfig):
 
     vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine = load_validation_components(device)
     # vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine = None, None, None, None, None
-    SAVE_DIR=os.environ.get("SAVE_DIR", "tests/test")
+    SAVE_DIR=os.environ.get("SAVE_DIR", "tests")
+    save_dir = osp.join(SAVE_DIR, f"epoch{epoch_start}_subj{args.data.subj}")
     validation_test(
         args,
         model, clip_img_embedder, diffusion_prior,
@@ -397,7 +398,7 @@ def main(args: DictConfig):
         test_dl,
         epoch_start,
         device,
-        save_dir=SAVE_DIR,
+        save_dir=save_dir,
         num_eval_samples=100
     )
 
