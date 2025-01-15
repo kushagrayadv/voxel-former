@@ -2,7 +2,8 @@
 # Model-related hyperparameters and configurations
 # ------------------------------------------------------------------------------
 
-
+# Decoder type
+decoder_type: 'qformer'  # Options: 'qformer', 'perceiver'
 
 # Architecture hyperparams
 n_blocks: 4
@@ -10,6 +11,8 @@ decoder_hidden_dim: 1280
 encoder_hidden_dim: 256
 use_mixer: false
 num_heads: 8
+head_dim: 64  # New parameter for Perceiver
+self_per_cross_attn: 1  # New parameter for Perceiver
 tome_r: 1000
 last_n_features: 16
 nat_depth: 8

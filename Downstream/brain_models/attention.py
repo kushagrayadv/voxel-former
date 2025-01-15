@@ -4,21 +4,65 @@ from functools import lru_cache
 import torch.nn.functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-class NearestNeighborAttention(nn.Module):
-    def __init__(self, feature_dim, num_heads, num_neighbors, full_attention=True):
+class BaseAttention(nn.Module):
+    def __init__(self, feature_dim, num_heads):
         super().__init__()
         self.feature_dim = feature_dim
         self.num_heads = num_heads
         self.head_dim = feature_dim // num_heads
-        self.num_neighbors = num_neighbors
         self.dtype = torch.bfloat16
         self.scale = self.head_dim ** -0.5
+
         # Initialize projection layers
         self.query_proj = nn.Linear(feature_dim, feature_dim, bias=False)
         self.key_proj = nn.Linear(feature_dim, feature_dim, bias=False)
         self.value_proj = nn.Linear(feature_dim, feature_dim, bias=False)
-        self.full_attention = full_attention
-        self.attention = nn.MultiheadAttention(feature_dim, num_heads, dropout=0.0, bias=False)
+
+    def _project_qkv(self, x):
+        batch_size, seq_len, _ = x.shape
+
+        # Project inputs to query, key, and value
+        query = self.query_proj(x)
+        key = self.key_proj(x)
+        value = self.value_proj(x)
+
+        # Reshape and transpose to get shapes: (batch_size, num_heads, seq_len, head_dim)
+        query = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        return query, key, value
+
+    def _reshape_output(self, output, batch_size, seq_len):
+        # Reshape output to (batch_size, seq_len, feature_dim)
+        return output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.feature_dim)
+
+class FullAttention(BaseAttention):
+    def __init__(self, feature_dim, num_heads):
+        super().__init__(feature_dim, num_heads)
+
+    def forward(self, x, coords=None, **kwargs):
+        with torch.amp.autocast(device_type='cuda', dtype=self.dtype):
+            batch_size, seq_len, _ = x.shape
+            query, key, value = self._project_qkv(x)
+
+            # Compute attention using scaled dot product attention
+            output = F.scaled_dot_product_attention(
+                query, key, value, dropout_p=0.0, scale=self.scale
+            )
+
+            # Compute metric for visualization
+            metric = key.mean(1)  # Averaging over heads
+
+            # Reshape output
+            output = self._reshape_output(output, batch_size, seq_len)
+
+            return output, metric
+
+class NearestNeighborAttention(BaseAttention):
+    def __init__(self, feature_dim, num_heads, num_neighbors):
+        super().__init__(feature_dim, num_heads)
+        self.num_neighbors = num_neighbors
 
     @lru_cache
     def _compute_nearest_neighbors(self, voxel_coords):
@@ -39,59 +83,32 @@ class NearestNeighborAttention(nn.Module):
     def forward(self, x, coords, **kwargs):
         with torch.amp.autocast(device_type='cuda', dtype=self.dtype):
             batch_size, seq_len, _ = x.shape
+            query, key, value = self._project_qkv(x)
 
-            # Project inputs to query, key, and value
-            query = self.query_proj(x)
-            key = self.key_proj(x)
-            value = self.value_proj(x)
+            # Compute nearest neighbors
+            top_k_indices = self._compute_nearest_neighbors(coords)
+            top_k_indices = top_k_indices.unsqueeze(1).expand(-1, self.num_heads, -1, -1)
 
-            # Reshape and transpose to get shapes: (batch_size, num_heads, seq_len, head_dim)
-            query = query.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-            key = key.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
-            value = value.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+            # Create batch and head indices for advanced indexing
+            batch_indices = torch.arange(batch_size, device=x.device).view(batch_size, 1, 1, 1).expand_as(top_k_indices)
+            head_indices = torch.arange(self.num_heads, device=x.device).view(1, self.num_heads, 1, 1).expand_as(top_k_indices)
 
-            # Set the scale factor for attention
-            scale_factor = self.scale
+            # Gather key and value vectors for nearest neighbors
+            key_neighbors = key[batch_indices, head_indices, top_k_indices, :]
+            value_neighbors = value[batch_indices, head_indices, top_k_indices, :]
 
-            if not self.full_attention:
-                # Compute nearest neighbors
-                top_k_indices = self._compute_nearest_neighbors(coords)  # Shape: (batch_size, seq_len, num_neighbors)
-                # Expand indices to match the dimensions of key and value tensors
-                top_k_indices = top_k_indices.unsqueeze(1).expand(-1, self.num_heads, -1, -1)  # Shape: (batch_size, num_heads, seq_len, num_neighbors)
-                '''
-                How it works: Using the computed nearest neighbor indices, the code extracts the corresponding key and value vectors for each voxel’s neighbors.
-                Effect: This step effectively limits the attention computation to only the nearest neighbors for each voxel, excluding all other positions.
-                '''
-                # Create batch and head indices for advanced indexing
-                batch_indices = torch.arange(batch_size, device=x.device).view(batch_size, 1, 1, 1).expand_as(top_k_indices)
-                head_indices = torch.arange(self.num_heads, device=x.device).view(1, self.num_heads, 1, 1).expand_as(top_k_indices)
-                # Gather key and value vectors for nearest neighbors using advanced indexing
-                key_neighbors = key[batch_indices, head_indices, top_k_indices, :]  # Shape: (batch_size, num_heads, seq_len, num_neighbors, head_dim)
-                value_neighbors = value[batch_indices, head_indices, top_k_indices, :]  # Shape: (batch_size, num_heads, seq_len, num_neighbors, head_dim)
-                # Compute attention scores
-                # query: (batch_size, num_heads, seq_len, head_dim)
-                # key_neighbors: (batch_size, num_heads, seq_len, num_neighbors, head_dim)
-                '''
-                Attention Scores: Computes the dot product between the query vector of each voxel and the key vectors of its nearest neighbors.
-                Softmax: Converts the attention scores into probabilities that sum to 1 over the neighbors.
-                '''
-                attn_scores = torch.einsum('bnhd,bnhkd->bnhk', query, key_neighbors) * scale_factor  # Shape: (batch_size, num_heads, seq_len, num_neighbors)
+            # Compute attention scores and probabilities
+            attn_scores = torch.einsum('bnhd,bnhkd->bnhk', query, key_neighbors) * self.scale
+            attn_probs = torch.softmax(attn_scores, dim=-1)
 
-                # Compute attention probabilities
-                attn_probs = torch.softmax(attn_scores, dim=-1)  # Shape: (batch_size, num_heads, seq_len, num_neighbors)
+            # Compute attention output
+            output = torch.einsum('bnhk,bnhkd->bnhd', attn_probs, value_neighbors)
 
-                # Compute attention output
-                output = torch.einsum('bnhk,bnhkd->bnhd', attn_probs, value_neighbors)  # Shape: (batch_size, num_heads, seq_len, head_dim)
-            else:
-                output = F.scaled_dot_product_attention(
-                    query, key, value, dropout_p=0.0, scale=scale_factor
-                )
+            # Compute metric for visualization
+            metric = key.mean(1)
 
-            # Compute metric (e.g., for visualization or further processing)
-            metric = key.mean(1)  # Averaging over heads
-
-            # Reshape output to (batch_size, seq_len, feature_dim)
-            output = output.transpose(1, 2).contiguous().view(batch_size, seq_len, self.feature_dim)
+            # Reshape output
+            output = self._reshape_output(output, batch_size, seq_len)
 
             return output, metric
 
@@ -120,8 +137,7 @@ if __name__ == "__main__":
         model = NearestNeighborAttention(
             feature_dim=feature_dim,
             num_heads=num_heads,
-            num_neighbors=num_neighbors,
-            full_attention=full_attention
+            num_neighbors=num_neighbors
         )
         
         # Forward pass

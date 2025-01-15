@@ -3,13 +3,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from diffusers.models.vae import Decoder
 
-# # Encoder
-# # TODO: @chenqian
-# class BrainEncoder(nn.Module):
-#     ...
-
-# Decoder
-
+# Q-former Decoder
 class CrossSelfAttentionLayer(nn.Module):
     def __init__(self,
                  hidden_size,
@@ -225,54 +219,71 @@ class BrainDecoder(nn.Module):
 class BrainTransformer(nn.Module):
     def __init__(self, args):
         super(BrainTransformer, self).__init__()
-        # TODO: rename these variables
         model_args = args.model
-        # NAT backbone feature extractor
-        # TODO: construct BrainEncoder
-        # self.brain_nat = BrainEncoder(
-        #     # ...
-        # )
-        # Example, the Tomer
-        from .backbone import BrainNAT
-        self.brain_nat = BrainNAT(
-            in_chans=1,
-            embed_dim=model_args.encoder_hidden_dim,
-            depth=model_args.nat_depth,
-            num_heads=model_args.num_heads,
-            num_neighbors=model_args.nat_num_neighbors,
-            tome_r=model_args.tome_r,
-            layer_scale_init_value=1e-6,
-            coord_dim=3,
-            omega_0=30,
-            last_n_features=model_args.last_n_features,
-            full_attention=model_args.full_attention,
-            drop_rate=model_args.drop,
-            progressive_dims=model_args.progressive_dims,
-            initial_tokens=model_args.initial_tokens,
-            dim_scale_factor=model_args.dim_scale_factor
-        )
+        from .tomer import Tomer
+        from .perceiver_decoder import PerceiverDecoder
         
-        # Linear layer to map brain_nat output to clip_emb_dim
-        self.feature_mapper = nn.Linear(self.brain_nat.blocks.final_dim, model_args.decoder_hidden_dim)
+        self.decoder_type = model_args.decoder_type
 
-        # Brain Network backbone
-        self.backbone = BrainDecoder(
-            h=model_args.decoder_hidden_dim,       # Dimension of brain_nat output
-            out_dim=model_args.clip_emb_dim,    # Desired output dimension
-            seq_len=model_args.clip_seq_dim,
-            n_blocks=model_args.n_blocks_decoder,
-            num_heads=model_args.num_heads,
-            drop=model_args.drop,
-            blurry_recon=args.train.blurry_recon,
-            clip_scale=args.train.clip_scale,
-        )
+        if self.decoder_type == 'perceiver':
+            # For Perceiver, we don't need the encoder
+            self.brain_decoder = PerceiverDecoder(
+                h=model_args.decoder_hidden_dim,
+                out_dim=model_args.clip_emb_dim,
+                num_latents=model_args.clip_seq_dim,
+                n_blocks=model_args.n_blocks_decoder,
+                num_heads=model_args.num_heads,
+                head_dim=model_args.head_dim,
+                drop=model_args.drop,
+                clip_scale=args.train.clip_scale,
+                self_per_cross_attn=model_args.self_per_cross_attn,
+                input_dim=1  # Input dimension is 1 for brain signal
+            )
+        else:  # 'qformer'
+            # Use encoder + Q-former decoder
+            self.brain_encoder = Tomer(
+                in_chans=1,
+                embed_dim=model_args.encoder_hidden_dim,
+                depth=model_args.nat_depth,
+                num_heads=model_args.num_heads,
+                num_neighbors=model_args.nat_num_neighbors,
+                tome_r=model_args.tome_r,
+                layer_scale_init_value=1e-6,
+                coord_dim=3,
+                omega_0=30,
+                last_n_features=model_args.last_n_features,
+                full_attention=model_args.full_attention,
+                drop_rate=model_args.drop,
+                progressive_dims=model_args.progressive_dims,
+                initial_tokens=model_args.initial_tokens,
+                dim_scale_factor=model_args.dim_scale_factor
+            )
+            
+            # Linear layer to map encoder output to decoder input
+            self.feature_mapper = nn.Linear(self.brain_encoder.blocks.final_dim, model_args.decoder_hidden_dim)
+            
+            self.brain_decoder = BrainDecoder(
+                h=model_args.decoder_hidden_dim,
+                out_dim=model_args.clip_emb_dim,
+                seq_len=model_args.clip_seq_dim,
+                n_blocks=model_args.n_blocks_decoder,
+                num_heads=model_args.num_heads,
+                drop=model_args.drop,
+                blurry_recon=args.train.blurry_recon,
+                clip_scale=args.train.clip_scale,
+            )
 
     def forward(self, x, coords):
-        # NAT backbone processing
-        x = self.brain_nat(x, coords)
-        x = self.feature_mapper(x)
-        # Brain Network processing
-        backbone, clip_voxels, blurry_image_enc = self.backbone(x)
+        if self.decoder_type == 'perceiver':
+            # For Perceiver, directly process the brain signal
+            # Reshape x if needed (assuming x is [batch_size, 1, num_voxels])
+            x = x.squeeze(1)  # Remove channel dimension if present
+            backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
+        else:
+            # For Q-former, use encoder + decoder
+            x = self.brain_encoder(x, coords)
+            x = self.feature_mapper(x)
+            backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
         
         # Add shape assertions for debugging
         batch_size = x.shape[0]

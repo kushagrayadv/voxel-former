@@ -133,14 +133,13 @@ def build_model(args, device, data_type):
     
 
     # model = torch.compile(model)
-    # TODO: rename these variables
     logger.info("model parameters:")
     Model_param = utils.count_params(model)
-    logger.info("model.brain_nat")
-    Brain_nat_param = utils.count_params(model.brain_nat)
-    logger.info("model.backbone")
-    Backbone_param = utils.count_params(model.backbone)
-    param_count_dict = {"Model_param": Model_param, "Brain_nat_param": Brain_nat_param, "Backbone_param": Backbone_param}
+    logger.info("model.brain_encoder")
+    Brain_Encoder_param = utils.count_params(model.brain_encoder)
+    logger.info("model.brain_decoder")
+    Brain_Decoder_param = utils.count_params(model.brain_decoder)
+    param_count_dict = {"Model_param": Model_param, "Brain_Encoder_param": Brain_Encoder_param, "Brain_Decoder_param": Brain_Decoder_param}
     return (
         clip_img_embedder,
         model,
@@ -154,69 +153,49 @@ def build_model(args, device, data_type):
     )
 
 def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
-    # TODO: clean up here
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     max_lr = args.train.max_lr
 
-    # Group parameters for NAT backbone
-    opt_grouped_parameters = [
-        {'params': [p for n, p in model.brain_nat.named_parameters() if not any(nd in n for nd in no_decay)],
-         'weight_decay': 1e-2},
-        {'params': [p for n, p in model.brain_nat.named_parameters() if any(nd in n for nd in no_decay)],
-         'weight_decay': 0.0},
-    ]
-    if hasattr(model, 'feature_mapper'):
+    # Initialize parameter groups list
+    opt_grouped_parameters = []
+
+    # Group parameters based on decoder type
+    if model.decoder_type == 'perceiver':
+        # For Perceiver, only optimize decoder parameters
+        opt_grouped_parameters.extend([
+            {'params': [p for n, p in model.brain_decoder.named_parameters() if not any(nd in n for nd in no_decay)],
+             'weight_decay': 1e-2},
+            {'params': [p for n, p in model.brain_decoder.named_parameters() if any(nd in n for nd in no_decay)],
+             'weight_decay': 0.0},
+        ])
+    else:  # 'qformer'
+        # For Q-former, optimize both encoder and decoder
+        # Encoder parameters
+        opt_grouped_parameters.extend([
+            {'params': [p for n, p in model.brain_encoder.named_parameters() if not any(nd in n for nd in no_decay)],
+             'weight_decay': 1e-2},
+            {'params': [p for n, p in model.brain_encoder.named_parameters() if any(nd in n for nd in no_decay)],
+             'weight_decay': 0.0},
+        ])
+        
+        # Feature mapper parameters
         opt_grouped_parameters.extend([
             {'params': [p for n, p in model.feature_mapper.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
             {'params': [p for n, p in model.feature_mapper.named_parameters() if any(nd in n for nd in no_decay)],
              'weight_decay': 0.0},
         ])
-
-    # Add voxel adaptor and embed linear parameters if they exist
-    if hasattr(model, 'voxel_adaptor'):
+        
+        # Decoder parameters
         opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.voxel_adaptor.named_parameters() if not any(nd in n for nd in no_decay)],
+            {'params': [p for n, p in model.brain_decoder.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
-            {'params': [p for n, p in model.voxel_adaptor.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-        ])
-    
-    if hasattr(model, 'embed_linear'):
-        opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.embed_linear.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2}, 
-            {'params': [p for n, p in model.embed_linear.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-        ])
-
-    # Add backbone parameters
-    opt_grouped_parameters.extend([
-        {'params': [p for n, p in model.backbone.named_parameters() if not any(nd in n for nd in no_decay)],
-         'weight_decay': 1e-2},
-        {'params': [p for n, p in model.backbone.named_parameters() if any(nd in n for nd in no_decay)],
-         'weight_decay': 0.0},
-    ])
-
-    # Add blurry recon parameters if enabled
-    if args.train.blurry_recon:
-        opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.backbone.blin1.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.backbone.blin1.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-            {'params': [p for n, p in model.backbone.b_maps_projector.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.backbone.b_maps_projector.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-            {'params': [p for n, p in model.backbone.bupsampler.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.backbone.bupsampler.named_parameters() if any(nd in n for nd in no_decay)],
+            {'params': [p for n, p in model.brain_decoder.named_parameters() if any(nd in n for nd in no_decay)],
              'weight_decay': 0.0},
         ])
 
     # Add prior network parameters if enabled
-    if args.train.use_prior:
+    if args.train.use_prior and diffusion_prior is not None:
         opt_grouped_parameters.extend([
             {'params': [p for n, p in diffusion_prior.named_parameters() if not any(nd in n for nd in no_decay)],
              'weight_decay': 1e-2},
@@ -224,8 +203,10 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
              'weight_decay': 0.0}
         ])
 
+    # Initialize optimizer
     optimizer = torch.optim.AdamW(opt_grouped_parameters, lr=max_lr)
 
+    # Setup learning rate scheduler
     if args.train.lr_scheduler_type == 'linear':
         lr_scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
@@ -240,8 +221,12 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
             max_lr=max_lr,
             total_steps=total_steps,
             final_div_factor=1000,
-            last_epoch=-1, pct_start=2 / args.train.num_epochs
+            last_epoch=-1, 
+            pct_start=2 / args.train.num_epochs
         )
+    else:
+        lr_scheduler = None
+
     return optimizer, lr_scheduler
 
 

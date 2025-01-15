@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import DropPath
-from .attention import NearestNeighborAttention
+from .attention import NearestNeighborAttention, FullAttention
 from .tome_customize import TokenMerging
 
 from IPython import embed
@@ -61,13 +61,17 @@ class SirenPositionalEmbedding(nn.Module):
         x = torch.sin(self.omega_0 * x)
         return x
 
-class BrainNATLayer(nn.Module):
+class TomerLayer(nn.Module):
     def __init__(self, dim, num_heads, num_neighbors, mlp_ratio=4., qkv_bias=True, drop=0., attn_drop=0.,
                  drop_path=0., norm_layer=nn.LayerNorm, tome_r=0, layer_scale_init_value=1e-6, use_coords=True,
                  last_n_features=16, full_attention=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = NearestNeighborAttention(dim, num_heads, num_neighbors, full_attention=full_attention)
+        # Choose attention type based on full_attention parameter
+        if full_attention:
+            self.attn = FullAttention(dim, num_heads)
+        else:
+            self.attn = NearestNeighborAttention(dim, num_heads, num_neighbors)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         self.token_merging = TokenMerging(r=tome_r)
@@ -92,7 +96,7 @@ class BrainNATLayer(nn.Module):
         x = x + self.drop_path(self.gamma_2 * self.mlp(self.norm2(x)))
         return x
 
-class BrainNATBlock(nn.Module):
+class TomerBlock(nn.Module):
     def __init__(self, dim, depth, num_heads, num_neighbors, mlp_ratio=4., qkv_bias=True, drop=0.,
                  attn_drop=0., drop_path=0., norm_layer=nn.LayerNorm, tome_r=0, layer_scale_init_value=1e-6,
                  last_n_features=16, full_attention=False, progressive_dims=False, dims=None):
@@ -106,7 +110,7 @@ class BrainNATBlock(nn.Module):
             next_dim = dims[i+1] if progressive_dims and i < depth-1 else dims[-1]  # Always use final dim for last layer
             
             # Create NAT layer
-            layer = BrainNATLayer(
+            layer = TomerLayer(
                 dim=current_dim,
                 num_heads=num_heads,
                 num_neighbors=num_neighbors,
@@ -142,7 +146,7 @@ class BrainNATBlock(nn.Module):
                 x = dim_layer(x)
         return x
 
-class BrainNAT(nn.Module):
+class Tomer(nn.Module):
     def __init__(self, in_chans=1, embed_dim=96, depth=4, num_heads=8, num_neighbors=5,
                  mlp_ratio=4., qkv_bias=True, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.2,
                  norm_layer=nn.LayerNorm, tome_r=0, layer_scale_init_value=1e-6, coord_dim=3, 
@@ -183,7 +187,7 @@ class BrainNAT(nn.Module):
         
         # Create blocks with progressive dimensions
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
-        self.blocks = BrainNATBlock(
+        self.blocks = TomerBlock(
             dim=self.total_embed_dim,
             depth=depth,
             num_heads=num_heads,
@@ -281,7 +285,7 @@ if __name__ == "__main__":
     # pos_embed_dim = 128  # Ensure that total_embed_dim is divisible by num_heads
     num_heads = 8  # Ensure total_embed_dim % num_heads == 0
 
-    model = BrainNAT(
+    model = Tomer(
         in_chans=1,
         embed_dim=embed_dim,
         # pos_embed_dim=pos_embed_dim,
