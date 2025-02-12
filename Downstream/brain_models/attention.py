@@ -134,11 +134,17 @@ if __name__ == "__main__":
         print(f"\nTesting with full_attention={full_attention}")
         
         # Initialize model
-        model = NearestNeighborAttention(
-            feature_dim=feature_dim,
-            num_heads=num_heads,
-            num_neighbors=num_neighbors
-        )
+        if full_attention:
+            model = FullAttention(
+                feature_dim=feature_dim,
+                num_heads=num_heads
+            )
+        else:
+            model = NearestNeighborAttention(
+                feature_dim=feature_dim,
+                num_heads=num_heads,
+                num_neighbors=num_neighbors
+            )
         
         # Forward pass
         output, metric = model(x, coords)

@@ -6,6 +6,11 @@ wandb/
 # notebook
 .ipynb_checkpoints/
 
+#IDEs
+/.idea
+*.iml
+.vscode/
+
 # tran_longs
 train_logs/
 
