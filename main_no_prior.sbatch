@@ -12,7 +12,7 @@
 #SBATCH --error=./slurm-logs/%x-%j.err
 
 
-overlay_ext3=/scratch/yz10381/singularity/fMRI.ext3
+overlay_ext3=/scratch/ky2684/brain-decoding/fmri-img-reconstruct.ext3
 export NUM_GPUS=2  # Set to equal gres=gpu:#!
 export BATCH_SIZE=16 # 21 for multisubject / 24 for singlesubject (orig. paper used 42 for multisubject / 24 for singlesubject)
 export GLOBAL_BATCH_SIZE=$((BATCH_SIZE * NUM_GPUS))
@@ -28,12 +28,12 @@ echo WORLD_SIZE=${COUNT_NODE}
 
 singularity exec --nv \
     --overlay ${overlay_ext3}:ro \
-    /scratch/work/public/singularity/cuda12.1.1-cudnn8.9.0-devel-ubuntu22.04.2.sif \
+    /scratch/work/public/singularity/cuda12.6.2-cudnn9.5.0-devel-ubuntu24.04.1.sif \
     /bin/bash -c "
 source /ext3/env.sh
-cd /scratch/yz10381/CODES/IVP/Brain_Decoding/Downstream
+cd /scratch/ky2684/brain-decoding/Brain_Decoding/Downstream
 
-export SSL_CERT_FILE=/scratch/yz10381/CODES/IVP/Brain_Decoding/tmp/cacert.pem
+export SSL_CERT_FILE=/scratch/ky2684/brain-decoding/Brain_Decoding/tmp/cacert.pem
 accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT} --mixed_precision=fp16 Train.py\
     --data_path=/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2 \
     --cache_dir=/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2 \
