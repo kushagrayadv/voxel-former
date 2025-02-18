@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 
 # Decoder type
-decoder_type: 'qformer'  # Options: 'qformer', 'perceiver'
+decoder_type: 'perceiver'  # Options: 'qformer', 'perceiver'
 
 # Architecture hyperparams
 n_blocks: 4

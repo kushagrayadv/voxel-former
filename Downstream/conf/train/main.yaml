@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 
 # Whether to use the diffusion prior (True) or just retrieval (False)
-use_prior: true
+use_prior: false
 blurry_recon: false
 
 # General training params
