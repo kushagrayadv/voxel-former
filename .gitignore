@@ -70,6 +70,7 @@ docs/_build/
 
 tmp/
 *.out
+outputs/
 
 slurm-logs/
 slurm-raw/

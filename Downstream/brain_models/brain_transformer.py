@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-from tqdm import tqdm
-from diffusers.models.vae import Decoder
 
 # Q-former Decoder
 class CrossSelfAttentionLayer(nn.Module):

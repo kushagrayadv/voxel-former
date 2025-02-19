@@ -25,7 +25,6 @@ from kornia.augmentation.container import AugmentationSequential
 from brain_models.brain_transformer import BrainTransformer
 # Add the path for SDXL unCLIP requirements
 sys.path.append('generative_models/')
-import sgm
 from generative_models.sgm.modules.encoders.modules import FrozenOpenCLIPImageEmbedder  # bigG embedder
 
 # Enable tf32 for faster computation
@@ -135,11 +134,11 @@ def build_model(args, device, data_type):
     # model = torch.compile(model)
     logger.info("model parameters:")
     Model_param = utils.count_params(model)
-    logger.info("model.brain_encoder")
-    Brain_Encoder_param = utils.count_params(model.brain_encoder)
+    # logger.info("model.brain_encoder")
+    # Brain_Encoder_param = utils.count_params(model.brain_encoder)
     logger.info("model.brain_decoder")
     Brain_Decoder_param = utils.count_params(model.brain_decoder)
-    param_count_dict = {"Model_param": Model_param, "Brain_Encoder_param": Brain_Encoder_param, "Brain_Decoder_param": Brain_Decoder_param}
+    param_count_dict = {"Model_param": Model_param, "Brain_Decoder_param": Brain_Decoder_param}
     return (
         clip_img_embedder,
         model,
