@@ -31,19 +31,20 @@ singularity exec --nv \
     /scratch/work/public/singularity/cuda12.6.2-cudnn9.5.0-devel-ubuntu24.04.1.sif \
     /bin/bash -c "
 source /ext3/env.sh
+export $(grep -v '^#' .env | xargs) && wandb login
 cd /scratch/ky2684/brain-decoding/Brain_Decoding/Downstream
 
 export SSL_CERT_FILE=/scratch/ky2684/brain-decoding/Brain_Decoding/tmp/cacert.pem
 accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT} --mixed_precision=fp16 Train.py\
     --data_path=/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2 \
     --cache_dir=/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2 \
-    --model_name=main_no_prior \
+    --model_name=main_no_prior_perciever \
     --multi_subject="2,3,4,5,6,7,8" \
     --subj=2 \
     --batch_size=${BATCH_SIZE} \
     --max_lr=5e-05 \
     --mixup_pct=0.33 \
-    --num_epochs=150 \
+    --num_epochs=100 \
     --no-use_prior \
     --prior_scale=30 \
     --clip_scale=1 \
@@ -66,7 +67,7 @@ accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT}
     --seed=42 \
     --no-use_mixer \
     --new_test \
-    --wandb_project=main_fmri \
+    --wandb_project=fmri_new \
     --full_attention \
     --n_blocks_decoder=6 \
     --drop=0.1 \
