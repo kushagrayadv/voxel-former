@@ -9,7 +9,7 @@ blurry_recon: false
 # General training params
 batch_size: 16
 global_batch_size: null
-num_epochs: 150
+num_epochs: 100
 seed: 42
 
 # Learning rate & scheduler
