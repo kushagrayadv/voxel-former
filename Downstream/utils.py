@@ -15,6 +15,7 @@ from PIL import Image
 import requests
 import time 
 from accelerate import Accelerator
+from hydra.utils import get_original_cwd
 
 import logging
 logger = logging.getLogger(__name__)
@@ -360,7 +361,8 @@ def soft_cont_loss(student_preds, teacher_preds, teacher_aug_preds, temp=0.125):
 
 def save_ckpt(tag, args, model, diffusion_prior, optimizer, lr_scheduler, epoch, losses, test_losses, lrs, accelerator, ckpt_saving=True):
     # TODO: refactor according to new configuration system
-    outdir = os.path.abspath(f'ckpts/{args.model_name}')
+    original_cwd = get_original_cwd()
+    outdir = os.path.join(original_cwd, f'ckpts/{args.model_name}')
     if not os.path.exists(outdir) and ckpt_saving:
         os.makedirs(outdir,exist_ok=True)
     ckpt_path = outdir+f'/{tag}.pth'
@@ -409,7 +411,8 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
     
     # Construct checkpoint path
     # TODO: Add support for loading from specific checkpoint path
-    ckpt_dir = os.path.abspath(f'ckpts/{args.model_name}')
+    original_cwd = get_original_cwd()
+    ckpt_dir = os.path.join(original_cwd, f'ckpts/{args.model_name}')
     ckpt_path = os.path.join(ckpt_dir, f'{tag}.pth')
     
     # If specified checkpoint doesn't exist, try to find latest iteration checkpoint
