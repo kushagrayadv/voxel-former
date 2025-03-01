@@ -371,7 +371,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         loss_clip = utils.mixco_nce(
                             clip_voxels_norm,
                             clip_target_norm,
-                            temp=.006,
+                            temp=.1,
                             accelerator=accelerator,
                             perm=perm, betas=betas, select=select)
                     else:
@@ -430,7 +430,12 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         pixcorr = utils.pixcorr(image[random_samps], blurry_recon_images)
                         blurry_pixcorr_per_iter = pixcorr.item()
                         blurry_pixcorr += blurry_pixcorr_per_iter
-                utils.check_loss(loss)
+                try:
+                    utils.check_loss(loss)
+                except ValueError as e:
+                    logger.info(f"perm: {perm}, betas: {betas}, select: {select}")
+                    raise ValueError(e)
+
                 accelerator.backward(loss)
                 optimizer.step()
 
