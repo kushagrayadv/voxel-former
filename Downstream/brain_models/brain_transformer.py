@@ -276,7 +276,7 @@ class BrainTransformer(nn.Module):
             # For Perceiver, directly process the brain signal
             # Reshape x if needed (assuming x is [batch_size, 1, num_voxels])
             x = x.squeeze(1)  # Remove channel dimension if present
-            backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
+            backbone, clip_voxels, blurry_image_enc, layer_outputs = self.brain_decoder(x)
         else:
             # For Q-former, use encoder + decoder
             x = self.brain_encoder(x, coords)
@@ -288,5 +288,5 @@ class BrainTransformer(nn.Module):
         assert backbone.shape[0] == batch_size, f"Expected backbone batch size {batch_size}, got {backbone.shape[0]}"
         assert clip_voxels.shape[0] == batch_size, f"Expected clip_voxels batch size {batch_size}, got {clip_voxels.shape[0]}"
         
-        return backbone, clip_voxels, blurry_image_enc
+        return backbone, clip_voxels, blurry_image_enc, layer_outputs
 

@@ -347,7 +347,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
 
                 clip_target = clip_img_embedder(image)
                 assert not torch.any(torch.isnan(clip_target))
-                backbone, clip_voxels, blurry_image_enc_ = model(voxel0, coords)
+                backbone, clip_voxels, blurry_image_enc_, _ = model(voxel0, coords)
                     
                 if clip_scale>0:
                     clip_voxels_norm = nn.functional.normalize(clip_voxels.flatten(1), dim=-1)
@@ -433,9 +433,16 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                 try:
                     utils.check_loss(loss)
                 except ValueError as e:
-                    logger.info(f"perm: {perm}, betas: {betas}, select: {select}")
+                    torch.set_printoptions(threshold=float("inf"))
+                    layer_output_dir = os.path.join(os.getcwd(), "layer_outputs")
+                    if not(os.path.exists(layer_output_dir)):
+                        os.mkdir(layer_output_dir)
+                    layer_output_path = os.path.join(layer_output_dir, "layer_output.txt")
+                    with open(layer_output_path, "w") as f:
+                        f.write(f"{clip_voxels_norm.tolist()}") 
+            
                     raise ValueError(e)
-
+                
                 accelerator.backward(loss)
                 optimizer.step()
 

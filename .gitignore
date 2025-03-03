@@ -17,6 +17,7 @@ train_logs/
 # ckpt
 pretraining/ckpt/
 pretraining/wandb/
+Downstream/ckpts/
 
 # test files
 **/test*
