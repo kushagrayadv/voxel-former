@@ -30,7 +30,7 @@ singularity exec --nv \
     /scratch/work/public/singularity/cuda12.6.2-cudnn9.5.0-devel-ubuntu24.04.1.sif \
     /bin/bash -c "
 source /ext3/env.sh
-export $(grep -v '^#' .env | xargs)
+export $(grep -v '^#' /scratch/ky2684/brain-decoding/Brain_Decoding/.env | xargs)
 cd /scratch/ky2684/brain-decoding/Brain_Decoding/Downstream
 wandb login
 
