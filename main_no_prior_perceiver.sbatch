@@ -6,6 +6,7 @@
 #SBATCH --mem=64GB
 #SBATCH --time=05:00:00
 #SBATCH --gres=gpu:2
+#SBATCH --constraint="h100"
 #SBATCH --account=pr_60_tandon_advanced
 #SBATCH --output=./slurm-logs/%x-%j.out
 #SBATCH --error=./slurm-logs/%x-%j.err

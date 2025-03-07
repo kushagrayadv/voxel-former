@@ -154,17 +154,17 @@ class PerceiverDecoder(nn.Module):
         for idx, (cross_attn, cross_ff, self_attns) in enumerate(self.layers):
             # Cross attention
             latents = cross_attn(latents, context=x) + latents
-            # layer_outputs[f'cross_attn_{idx+1}'] = latents
+            layer_outputs[f'cross_attn_{idx+1}'] = latents
             latents = cross_ff(latents) + latents
-            # layer_outputs[f'cross_ff_{idx+1}'] = latents
+            layer_outputs[f'cross_ff_{idx+1}'] = latents
             
             # Self attention blocks
             for attn_i, (self_attn, self_ff) in enumerate(self_attns):
                 latents = self_attn(latents) + latents
-                # layer_outputs[f'self_attn_{attn_i+1}_block_{idx+1}'] = latents
+                layer_outputs[f'self_attn_{attn_i+1}_block_{idx+1}'] = latents
 
                 latents = self_ff(latents) + latents
-                # layer_outputs[f'self_ff_{attn_i+1}_block_{idx+1}'] = latents
+                layer_outputs[f'self_ff_{attn_i+1}_block_{idx+1}'] = latents
         
         # Project to output dimensions
         backbone = self.backbone_head(latents)
@@ -173,6 +173,8 @@ class PerceiverDecoder(nn.Module):
             clip_output = self.clip_head(latents)
         else:
             clip_output = latents
+        
+        layer_outputs['clip_output'] = clip_output
             
         # Placeholder for blurry reconstruction
         b = torch.zeros((batch_size, 2, 1), device=x.device)
