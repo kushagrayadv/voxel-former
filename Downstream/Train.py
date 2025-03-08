@@ -352,6 +352,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                 if clip_scale>0:
                     clip_voxels_norm = nn.functional.normalize(clip_voxels.flatten(1), dim=-1)
                     clip_target_norm = nn.functional.normalize(clip_target.flatten(1), dim=-1)
+                    layer_outputs['clip_voxels_norm'] = clip_voxels_norm
 
                 if use_prior:
                     loss_prior, prior_out = diffusion_prior(text_embed=backbone, image_embed=clip_target)

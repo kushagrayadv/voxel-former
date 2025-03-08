@@ -6,6 +6,7 @@
 #SBATCH --mem=64GB
 #SBATCH --time=07:00:00
 #SBATCH --gres=gpu:1
+#SBATCH --constraint="h100"
 #SBATCH --account=pr_60_tandon_advanced
 #SBATCH --output=./slurm-logs/%x-%j.out
 #SBATCH --error=./slurm-logs/%x-%j.err
@@ -13,7 +14,7 @@
 
 overlay_ext3=/scratch/ky2684/brain-decoding/fmri-img-reconstruct.ext3
 export NUM_GPUS=1  # Set to equal gres=gpu:#!
-export BATCH_SIZE=4 # 21 for multisubject / 24 for singlesubject (orig. paper used 42 for multisubject / 24 for singlesubject)
+export BATCH_SIZE=16 # 21 for multisubject / 24 for singlesubject (orig. paper used 42 for multisubject / 24 for singlesubject)
 export GLOBAL_BATCH_SIZE=$((BATCH_SIZE * NUM_GPUS))
 
 # Make sure another job doesnt use same port, here using random number
