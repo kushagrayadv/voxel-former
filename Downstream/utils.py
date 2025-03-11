@@ -217,18 +217,29 @@ def mixco_nce(preds, targs, temp=0.1, perm=None, betas=None, select=None, distri
             betas = accelerator.gather(betas)
         if perm is not None:
             perm = accelerator.gather(perm.to(preds.device)) # perm is not cuda
+    output = {}
     
 
     brain_clip = (preds @ targs.T)/temp
+    output['brain_clip'] = brain_clip
     
     if perm is not None and betas is not None and select is not None:
         probs = torch.diag(betas)
         probs[torch.arange(preds.shape[0]).to(preds.device), perm] = 1 - betas
 
-        loss = -(brain_clip.log_softmax(-1) * probs).sum(-1).mean()
+        brain_clip_softmax = brain_clip.log_softmax(-1)
+        output['brain_clip_softmax'] = brain_clip_softmax
+        
+        loss = -(brain_clip_softmax * probs).sum(-1).mean()
+        output['loss_1'] = loss
+
         if bidirectional:
-            loss2 = -(brain_clip.T.log_softmax(-1) * probs.T).sum(-1).mean()
+            loss2 = -(brain_clip_softmax * probs.T).sum(-1).mean()
+            output['loss_2'] = loss2
+            
             loss = (loss + loss2)/2
+            output['loss_avg'] = loss
+
 
     else:
         loss =  F.cross_entropy(brain_clip, torch.arange(brain_clip.shape[0]).to(brain_clip.device))
@@ -236,6 +247,21 @@ def mixco_nce(preds, targs, temp=0.1, perm=None, betas=None, select=None, distri
             loss2 = F.cross_entropy(brain_clip.T, torch.arange(brain_clip.shape[0]).to(brain_clip.device))
             loss = (loss + loss2)/2
     
+    try:
+        check_loss(loss)
+    except ValueError as e:
+        torch.set_printoptions(threshold=float("inf"))
+        loss_output_dir = os.path.join(os.getcwd(), "loss_outputs")
+        if not os.path.exists(loss_output_dir):
+            os.makedirs(loss_output_dir, exist_ok=True)
+        
+            for loss, value in output.items():
+                layer_output_path = os.path.join(loss_output_dir, f"{loss}.txt")
+                with open(layer_output_path, "w") as f:
+                    f.write(f"{value.tolist()}") 
+
+            raise ValueError(e)
+
     return loss
     
 def count_params(model):

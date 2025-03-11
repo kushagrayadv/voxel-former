@@ -35,7 +35,6 @@ export $(grep -v '^#' /scratch/ky2684/brain-decoding/Brain_Decoding/.env | xargs
 cd /scratch/ky2684/brain-decoding/Brain_Decoding/Downstream
 wandb login
 
-
 export SSL_CERT_FILE=/scratch/ky2684/brain-decoding/Brain_Decoding/tmp/cacert.pem
 accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT} --mixed_precision=fp16 Train.py train.batch_size=${BATCH_SIZE}
 "

@@ -347,12 +347,11 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
 
                 clip_target = clip_img_embedder(image)
                 assert not torch.any(torch.isnan(clip_target))
-                backbone, clip_voxels, blurry_image_enc_, layer_outputs = model(voxel0, coords)
+                backbone, clip_voxels, blurry_image_enc_ = model(voxel0, coords)
                     
                 if clip_scale>0:
                     clip_voxels_norm = nn.functional.normalize(clip_voxels.flatten(1), dim=-1)
                     clip_target_norm = nn.functional.normalize(clip_target.flatten(1), dim=-1)
-                    layer_outputs['clip_voxels_norm'] = clip_voxels_norm
 
                 if use_prior:
                     loss_prior, prior_out = diffusion_prior(text_embed=backbone, image_embed=clip_target)
@@ -431,21 +430,8 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         pixcorr = utils.pixcorr(image[random_samps], blurry_recon_images)
                         blurry_pixcorr_per_iter = pixcorr.item()
                         blurry_pixcorr += blurry_pixcorr_per_iter
-                try:
-                    utils.check_loss(loss)
-                except ValueError as e:
-                    torch.set_printoptions(threshold=float("inf"))
-                    layer_output_dir = os.path.join(os.getcwd(), "layer_outputs")
-                    if not os.path.exists(layer_output_dir):
-                        os.makedirs(layer_output_dir, exist_ok=True)
-                    
-                    for layer, value in layer_outputs.items():
-                        layer_output_path = os.path.join(layer_output_dir, f"{layer}_output.txt")
-                        with open(layer_output_path, "w") as f:
-                            f.write(f"{value.tolist()}") 
-            
-                    raise ValueError(e)
                 
+                utils.check_loss(loss)
                 accelerator.backward(loss)
                 optimizer.step()
 
@@ -538,7 +524,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
 
                 clip_target = clip_img_embedder(image)
                 for rep in range(3):
-                    backbone0, clip_voxels0, blurry_image_enc_, _ = model(voxel[:,rep], coords[:,rep])
+                    backbone0, clip_voxels0, blurry_image_enc_= model(voxel[:,rep], coords[:,rep])
                     if rep==0:
                         clip_voxels = clip_voxels0
                         backbone = backbone0
