@@ -150,13 +150,13 @@ class PerceiverDecoder(nn.Module):
         latents = repeat(self.latents, '1 n d -> b n d', b=batch_size)
         
         # Process through layers
-        for idx, (cross_attn, cross_ff, self_attns) in enumerate(self.layers):
+        for cross_attn, cross_ff, self_attns in self.layers:
             # Cross attention
             latents = cross_attn(latents, context=x) + latents
             latents = cross_ff(latents) + latents
             
             # Self attention blocks
-            for attn_i, (self_attn, self_ff) in enumerate(self_attns):
+            for self_attn, self_ff in self_attns:
                 latents = self_attn(latents) + latents
 
                 latents = self_ff(latents) + latents
