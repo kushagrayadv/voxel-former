@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=fmri_perceiver
+#SBATCH --job-name=fmri_new
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64GB

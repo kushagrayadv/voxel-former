@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=fmri_perceiver_single_gpu
+#SBATCH --job-name=fmri_new_single_gpu
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64GB
