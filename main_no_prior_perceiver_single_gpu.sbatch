@@ -38,3 +38,4 @@ wandb login
 export SSL_CERT_FILE=/scratch/ky2684/brain-decoding/Brain_Decoding/tmp/cacert.pem
 accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT} --mixed_precision=fp16 Train.py train.batch_size=${BATCH_SIZE}
 "
+# accelerate launch --num_processes=1 --main_process_port=29500 --mixed_precision=fp16 Train.py train.batch_size=4

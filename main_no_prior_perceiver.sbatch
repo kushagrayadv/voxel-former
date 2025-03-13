@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64GB
-#SBATCH --time=05:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:2
 #SBATCH --constraint="h100"
 #SBATCH --account=pr_60_tandon_advanced
