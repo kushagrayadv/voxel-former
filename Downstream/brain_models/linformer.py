@@ -105,7 +105,7 @@ class LinformerSelfAttention(nn.Module):
 
         queries = self.to_q(x)
 
-        proj_seq_len = lambda args: torch.einsum("bnd,nk->bkd", *args)
+        proj_seq_len = lambda args: torch.einsum("b n d, n k->b k d", *args)
 
         kv_input = x if context is None else context
 
@@ -156,8 +156,10 @@ class Linformer(nn.Module):
         one_kv_head=False,
         share_kv=False,
         dropout=0.0,
+        input_dim=1
     ):
         super().__init__()
+        self.input_proj = nn.Linear(input_dim, dim)
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             attn = LinformerSelfAttention(
@@ -175,6 +177,7 @@ class Linformer(nn.Module):
             self.layers.append(nn.ModuleList([PreNorm(dim, attn), PreNorm(dim, ff)]))
 
     def forward(self, x):
+        x = self.input_proj(x.unsqueeze(-1))
         for self_attn, ff in self.layers:
             x = self_attn(x) + x
             x = ff(x) + x

@@ -322,7 +322,12 @@ class BrainTransformer(nn.Module):
             backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
         else:
             # For Q-former, use encoder + decoder
-            x = self.brain_encoder(x, coords)
+            if self.encoder_type == 'linformer':
+                x = x.squeeze(1)
+                x = self.brain_encoder(x)
+            else:
+                x = self.brain_encoder(x, coords)
+
             x = self.feature_mapper(x)
             backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
 
