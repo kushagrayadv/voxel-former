@@ -3,13 +3,13 @@
 # ------------------------------------------------------------------------------
 
 # Whether to use the diffusion prior (True) or just retrieval (False)
-use_prior: false
+use_prior: true
 blurry_recon: false
 
 # General training params
-batch_size: 16
+batch_size: 8
 global_batch_size: null
-num_epochs: 100
+num_epochs: 150
 seed: 42
 
 # Learning rate & scheduler

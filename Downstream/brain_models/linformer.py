@@ -1,6 +1,7 @@
 import math
 import torch
 from torch import nn
+from einops import repeat
 
 def default(val, default_val):
     return val if val is not None else default_val
@@ -56,6 +57,30 @@ class FeedForward(nn.Module):
         x = self.dropout(x)
         x = self.layer2(x)
         return x
+
+
+class AttentionPooling(nn.Module):
+    def __init__(self, dim, seq_len, num_heads=8):
+
+        super().__init__()
+        self.seq_len = seq_len
+        self.dim = dim
+
+        # Learnable queries to project num_voxels dimension to seq_len
+        self.queries = nn.Parameter(torch.randn(1, seq_len, dim))
+
+        self.attention = nn.MultiheadAttention(
+            embed_dim=dim, num_heads=num_heads, batch_first=True
+        )
+
+    def forward(self, x):
+        batch_size = x.shape[0]
+
+        queries = repeat(self.queries, "1 n d -> b n d", b=batch_size)
+
+        pooled_output, _ = self.attention(queries, x, x)
+
+        return pooled_output
 
 
 class LinformerSelfAttention(nn.Module):
@@ -156,9 +181,10 @@ class Linformer(nn.Module):
         one_kv_head=False,
         share_kv=False,
         dropout=0.0,
-        input_dim=1
+        input_dim=1,
     ):
         super().__init__()
+        self.attn_pooling = AttentionPooling(dim=dim, seq_len=seq_len, num_heads=heads)
         self.input_proj = nn.Linear(input_dim, dim)
         self.layers = nn.ModuleList([])
         for _ in range(depth):
@@ -178,6 +204,7 @@ class Linformer(nn.Module):
 
     def forward(self, x):
         x = self.input_proj(x.unsqueeze(-1))
+        x = self.attn_pooling(x)
         for self_attn, ff in self.layers:
             x = self_attn(x) + x
             x = ff(x) + x

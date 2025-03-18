@@ -264,19 +264,19 @@ class BrainTransformer(nn.Module):
             # Use encoder + Q-former decoder
             if self.encoder_type == "linformer":
                 self.brain_encoder = Linformer(
-                    dim=model_args.encoder_hidden_dim,
-                    seq_len=model_args.clip_seq_dim,
+                    dim=512,
+                    seq_len=2048,
                     depth=model_args.nat_depth,
-                    k=model_args.encoder_hidden_dim,
+                    k=512,
                     heads=model_args.num_heads,
-                    dim_head=model_args.head_dim,
+                    dim_head=None,
                     one_kv_head=False,
                     share_kv=False,
                     dropout=model_args.drop,
                 )
 
                 self.feature_mapper = nn.Linear(
-                    model_args.encoder_hidden_dim, model_args.decoder_hidden_dim
+                    512, model_args.decoder_hidden_dim
                 )
 
             else:
