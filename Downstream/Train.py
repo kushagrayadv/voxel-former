@@ -134,11 +134,19 @@ def build_model(args, device, data_type):
     # model = torch.compile(model)
     logger.info("model parameters:")
     Model_param = utils.count_params(model)
-    # logger.info("model.brain_encoder")
-    # Brain_Encoder_param = utils.count_params(model.brain_encoder)
-    logger.info("model.brain_decoder")
-    Brain_Decoder_param = utils.count_params(model.brain_decoder)
-    param_count_dict = {"Model_param": Model_param, "Brain_Decoder_param": Brain_Decoder_param}
+
+    if model.brain_encoder:
+        logger.info("model.brain_encoder")
+        Brain_Encoder_param = utils.count_params(model.brain_encoder)
+    else:
+        Brain_Encoder_param = None
+    
+    if model.brain_decoder:
+        logger.info("model.brain_decoder")
+        Brain_Decoder_param = utils.count_params(model.brain_decoder)
+    else:
+        Brain_Decoder_param = None
+    param_count_dict = {"Model_param": Model_param, "Brain_Encoder_param": Brain_Encoder_param, "Brain_Decoder_param": Brain_Decoder_param}
     return (
         clip_img_embedder,
         model,
@@ -728,6 +736,7 @@ def main(args: DictConfig) -> None:
     epoch_start, losses, test_losses, lrs, resumed = utils.load_ckpt(
         args=args,
         model=model,
+        diffusion_prior=diffusion_prior,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
         accelerator=accelerator,
