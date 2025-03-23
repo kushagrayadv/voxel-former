@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64GB
-#SBATCH --time=07:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --constraint="h100"
 #SBATCH --account=pr_60_tandon_advanced
@@ -14,7 +14,7 @@
 
 overlay_ext3=/scratch/ky2684/brain-decoding/fmri-img-reconstruct.ext3
 export NUM_GPUS=1  # Set to equal gres=gpu:#!
-export BATCH_SIZE=16 # 21 for multisubject / 24 for singlesubject (orig. paper used 42 for multisubject / 24 for singlesubject)
+export BATCH_SIZE=8 # 21 for multisubject / 24 for singlesubject (orig. paper used 42 for multisubject / 24 for singlesubject)
 export GLOBAL_BATCH_SIZE=$((BATCH_SIZE * NUM_GPUS))
 
 # Make sure another job doesnt use same port, here using random number
