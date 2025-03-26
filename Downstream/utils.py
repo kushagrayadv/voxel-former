@@ -3,6 +3,7 @@ from torchvision import transforms
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchinfo import summary
 import PIL
 import random
 import os
@@ -504,3 +505,12 @@ def load_ckpt(args, model, diffusion_prior=None, optimizer=None, lr_scheduler=No
         logger.info(f"No checkpoint found at {ckpt_path}, starting from scratch")
     
     return epoch, losses, test_losses, lrs, resumed
+
+
+def show_model_summary(model, input_size):
+    summary(model=model,
+            input_size=input_size,
+            col_names=["input_size", "output_size", "num_params", "trainable"],
+            col_width=20,
+            row_settings=["var_names"],
+            verbose=2)
