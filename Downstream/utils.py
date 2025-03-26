@@ -16,6 +16,7 @@ import requests
 import time 
 from accelerate import Accelerator
 from hydra.utils import get_original_cwd
+import pdb
 
 import logging
 logger = logging.getLogger(__name__)
@@ -246,21 +247,6 @@ def mixco_nce(preds, targs, temp=0.1, perm=None, betas=None, select=None, distri
         if bidirectional:
             loss2 = F.cross_entropy(brain_clip.T, torch.arange(brain_clip.shape[0]).to(brain_clip.device))
             loss = (loss + loss2)/2
-    
-    try:
-        check_loss(loss)
-    except ValueError as e:
-        torch.set_printoptions(threshold=float("inf"))
-        loss_output_dir = os.path.join(os.getcwd(), "loss_outputs")
-        if not os.path.exists(loss_output_dir):
-            os.makedirs(loss_output_dir, exist_ok=True)
-        
-            for loss, value in output.items():
-                layer_output_path = os.path.join(loss_output_dir, f"{loss}.txt")
-                with open(layer_output_path, "w") as f:
-                    f.write(f"{value.tolist()}") 
-
-            raise ValueError(e)
 
     return loss
     

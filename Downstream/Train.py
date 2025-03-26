@@ -36,6 +36,7 @@ from utils import save_ckpt
 from dataset import MindEye2Dataset, SubjectBatchSampler, custom_collate_fn
 import re
 from brain_models.models import PriorNetwork, BrainDiffusionPrior
+import pdb
 
 import logging
 logger = logging.getLogger(__name__)  # __name__ = name of the current module
@@ -439,8 +440,28 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         blurry_pixcorr_per_iter = pixcorr.item()
                         blurry_pixcorr += blurry_pixcorr_per_iter
                 
-                utils.check_loss(loss)
+                try:
+                    utils.check_loss(loss)
+                except:
+                    save_ckpt(f'nan_loss_ckpt',
+                                  args,
+                                  accelerator.unwrap_model(model),
+                                  None if diffusion_prior is None else accelerator.unwrap_model(diffusion_prior),
+                                  optimizer,
+                                  lr_scheduler,
+                                  epoch,
+                                  losses,
+                                  test_losses,
+                                  lrs,
+                                  accelerator,
+                                  ckpt_saving=True)
+                    # pdb.set_trace()
+                    raise ValueError
+                                
                 accelerator.backward(loss)
+
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
                 optimizer.step()
 
                 losses.append(loss.item())

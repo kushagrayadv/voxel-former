@@ -246,6 +246,9 @@ class BrainTransformer(nn.Module):
         self.decoder_type = model_args.decoder_type
         self.encoder_type = model_args.encoder_type
 
+        self.brain_encoder = None
+        self.brain_decoder = None
+
         if self.decoder_type == "perceiver":
             # For Perceiver, we don't need the encoder
             self.brain_decoder = PerceiverDecoder(
