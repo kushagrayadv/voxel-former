@@ -41,6 +41,52 @@ import pdb
 import logging
 logger = logging.getLogger(__name__)  # __name__ = name of the current module
 
+# Add configuration for visualizing hierarchical downsampling if needed
+def visualize_hierarchy(model, coords, device, wandb_log=False):
+    """Visualize the hierarchical downsampling of brain coordinates"""
+    # Check if this is a hierarchical perceiver model by looking for the downsample_layers attribute
+    if (not hasattr(model, 'brain_decoder') or 
+        not hasattr(model.brain_decoder, 'downsample_layers')):
+        return None
+    
+    # Create a sample batch with correct dimensions
+    batch_size = 1
+    voxel_count = coords.shape[1]
+    
+    # Ensure dummy input has proper shape
+    dummy_input = torch.ones(batch_size, voxel_count, 1, device=device)
+    
+    # Create a simplified visualization without running the actual downsampling
+    num_levels = len(model.brain_decoder.downsample_layers) + 1
+    fig = plt.figure(figsize=(15, 5))
+    
+    # Just visualize the original coordinates
+    ax = fig.add_subplot(1, num_levels, 1, projection='3d')
+    orig_coords = coords[0].cpu().numpy()
+    ax.scatter(orig_coords[:, 0], orig_coords[:, 1], orig_coords[:, 2], s=5, alpha=0.8)
+    ax.set_title(f'Original: {orig_coords.shape[0]} tokens')
+    
+    # Estimate the downsampled coordinates based on downsample factors
+    current_count = voxel_count
+    for i in range(num_levels-1):
+        factor = model.brain_decoder.downsample_layers[i].factor
+        current_count = current_count // factor
+        
+        # Simply sample a subset of points to visualize
+        indices = torch.randperm(orig_coords.shape[0])[:current_count]
+        downsampled = orig_coords[indices]
+        
+        ax = fig.add_subplot(1, num_levels, i+2, projection='3d')
+        ax.scatter(downsampled[:, 0], downsampled[:, 1], downsampled[:, 2], s=5, alpha=0.8)
+        ax.set_title(f'Level {i+1}: ~{current_count} tokens')
+    
+    plt.tight_layout()
+    
+    if wandb_log:
+        return wandb.Image(fig, caption="Estimated Brain Token Downsampling")
+    else:
+        return fig
+
 def prepare_data(args, data_type):
     train_data = MindEye2Dataset(args.data, data_type, 'train')
     train_sampler = SubjectBatchSampler(train_data, args.train.batch_size)
@@ -148,6 +194,15 @@ def build_model(args, device, data_type):
     else:
         Brain_Decoder_param = None
     param_count_dict = {"Model_param": Model_param, "Brain_Encoder_param": Brain_Encoder_param, "Brain_Decoder_param": Brain_Decoder_param}
+    
+    # Visualize hierarchical structure if using perceiver decoder
+    if model.decoder_type == "perceiver" and args.wandb_log and args.model.visualize_hierarchy:
+        # Create a dummy batch for visualization
+        dummy_coords = torch.randn(1, 10000, 3, device=device)  # Adjust size based on your data
+        hierarchy_viz = visualize_hierarchy(model, dummy_coords, device, wandb_log=True)
+        if hierarchy_viz is not None:
+            param_count_dict["hierarchy_visualization"] = hierarchy_viz
+    
     return (
         clip_img_embedder,
         model,
@@ -293,6 +348,27 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
         range(epoch_start, num_epochs), 
         disable=not accelerator.is_local_main_process
     )
+    
+    # Create visualizations for hierarchical perceiver if needed
+    if (wandb_log and accelerator.is_main_process):
+        # Unwrap the model to access its attributes
+        unwrapped_model = accelerator.unwrap_model(model)
+        
+        if (unwrapped_model.decoder_type == "perceiver" and 
+            getattr(args.model, 'visualize_hierarchy', False)):
+            
+            # Get first batch for visualization
+            for images, voxels, subj_idx, coords, image_idx in train_dl:
+                coords = coords.to(device)
+                hierarchy_viz = visualize_hierarchy(
+                    unwrapped_model,  # Use unwrapped model here
+                    coords, 
+                    device, 
+                    wandb_log=True
+                )
+                if hierarchy_viz is not None:
+                    wandb.log({"hierarchy_visualization": hierarchy_viz})
+                break
     
     global_iteration = epoch_start * num_iterations_per_epoch
     for epoch in epoch_progress:
@@ -689,6 +765,16 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
 
 @hydra.main(config_path="conf", config_name="config")
 def main(args: DictConfig) -> None:
+    # Add default values for hierarchical perceiver parameters if not present
+    if not hasattr(args.model, 'downsample_factors'):
+        args.model.downsample_factors = [2, 2, 2, 2]
+    if not hasattr(args.model, 'use_residual'):
+        args.model.use_residual = True
+    if not hasattr(args.model, 'downsample_method'):
+        args.model.downsample_method = 'grid'
+    if not hasattr(args.model, 'visualize_hierarchy'):
+        args.model.visualize_hierarchy = False
+    
     torch._dynamo.config.optimize_ddp=False
 
     # Initialize accelerator first

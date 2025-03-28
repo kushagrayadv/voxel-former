@@ -25,6 +25,12 @@ nat_num_neighbors: 8
 full_attention: true
 n_blocks_decoder: 6
 
+# Hierarchical Perceiver parameters
+downsample_factors: [2, 2, 2, 2]  # Controls token reduction at each level
+use_residual: true                # Use U-Net style skip connections
+downsample_method: "grid"         # Downsampling method: "grid" or "knn"
+visualize_hierarchy: true         # Visualize hierarchical downsampling
+
 # Dropout and progressive-dim scaling
 drop: 0.1
 progressive_dims: true

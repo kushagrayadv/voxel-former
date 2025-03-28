@@ -1,7 +1,7 @@
 import math
 import torch
 from torch import nn
-from einops import repeat
+from einops import repeat, rearrange
 
 def default(val, default_val):
     return val if val is not None else default_val
@@ -81,6 +81,24 @@ class AttentionPooling(nn.Module):
         pooled_output, _ = self.attention(queries, x, x)
 
         return pooled_output
+
+
+class SirenPositionalEmbedding(nn.Module):
+    def __init__(self, in_features, out_features, omega_0=30):
+        super().__init__()
+        self.linear = nn.Linear(in_features, out_features)
+        self.omega_0 = omega_0
+        self.in_features = in_features
+        self._init_weights()
+    
+    def _init_weights(self):
+        with torch.no_grad():
+            self.linear.weight.uniform_(-1 / self.in_features, 1 / self.in_features)
+    
+    def forward(self, coords):
+        x = self.linear(coords)
+        x = torch.sin(self.omega_0 * x)
+        return x
 
 
 class LinformerSelfAttention(nn.Module):
@@ -166,7 +184,55 @@ class LinformerSelfAttention(nn.Module):
 
         # split heads
         out = out.transpose(1, 2).reshape(b, n, -1)
-        return self.to_out(out)
+        return self.to_out(out), keys
+
+
+class TokenMerging(nn.Module):
+    def __init__(self, r=0, trace_source=False, prop_attn=True):
+        super().__init__()
+        self.r = r
+        self.trace_source = trace_source
+        self.prop_attn = prop_attn
+        self._tome_info = {
+            "r": self.r,
+            "size": None,
+            "source": None,
+            "trace_source": self.trace_source,
+            "prop_attn": self.prop_attn,
+            "class_token": False,  # Set this based on your specific model's requirements
+            "distill_token": False,  # Set this based on your specific model's requirements
+        }
+
+    def forward(self, x: torch.Tensor, metric: torch.Tensor) -> torch.Tensor:
+        # Reset tome_info for each batch, if needed
+        self._tome_info["source"] = None
+        self._tome_info["size"] = None
+
+        r = self._tome_info["r"]
+        
+        if r > 0:
+            try:
+                from tome.merge import bipartite_soft_matching, merge_source, merge_wavg
+                
+                merge, _ = bipartite_soft_matching(
+                    metric,
+                    r,
+                    self._tome_info["class_token"],
+                    self._tome_info["distill_token"],
+                )
+                if self.trace_source:
+                    self._tome_info["source"] = merge_source(
+                        merge, x, self._tome_info["source"]
+                    )
+                try:
+                    x, self._tome_info["size"] = merge_wavg(merge, x, self._tome_info["size"])
+                except Exception as e:
+                    print(f"Error in merge_wavg: {str(e)}")
+                    import pdb; pdb.set_trace()
+            except ImportError:
+                print("ToMe requires installation: pip install tome-torch")
+                pass
+        return x
 
 
 class Linformer(nn.Module):
@@ -182,11 +248,21 @@ class Linformer(nn.Module):
         share_kv=False,
         dropout=0.0,
         input_dim=1,
+        tome_r=0,
+        coord_dim=3,
+        omega_0=30
     ):
         super().__init__()
         self.attn_pooling = AttentionPooling(dim=dim, seq_len=seq_len, num_heads=heads)
         self.input_proj = nn.Linear(input_dim, dim)
         self.layers = nn.ModuleList([])
+        
+        # Add positional embedding
+        self.pos_embed = SirenPositionalEmbedding(in_features=coord_dim, out_features=dim, omega_0=omega_0)
+        
+        # Add token merging
+        self.token_merging = TokenMerging(r=tome_r)
+        
         for _ in range(depth):
             attn = LinformerSelfAttention(
                 dim,
@@ -202,11 +278,23 @@ class Linformer(nn.Module):
 
             self.layers.append(nn.ModuleList([PreNorm(dim, attn), PreNorm(dim, ff)]))
 
-    def forward(self, x):
+    def forward(self, x, coords=None):
         x = self.input_proj(x.unsqueeze(-1))
+        
+        # Add positional embeddings if coordinates are provided
+        if coords is not None:
+            pos_embeds = self.pos_embed(coords)
+            x = x + pos_embeds
+            
         x = self.attn_pooling(x)
+        
         for self_attn, ff in self.layers:
-            x = self_attn(x) + x
+            attn_out, metric = self_attn(x)
+            x = attn_out + x
+            
+            # Apply token merging
+            x = self.token_merging(x, metric)
+            
             x = ff(x) + x
 
         return x

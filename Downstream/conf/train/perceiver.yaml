@@ -1,0 +1,34 @@
+# ------------------------------------------------------------------------------
+# Training configuration optimized for Hierarchical Perceiver on H100 GPUs
+# ------------------------------------------------------------------------------
+
+# Whether to use the diffusion prior
+use_prior: false
+blurry_recon: false
+
+# General training params for H100 (80GB)
+batch_size: 64       # For 80GB H100
+global_batch_size: null
+num_epochs: 150
+seed: 42
+
+# Learning rate & scheduler
+max_lr: 1.0e-04     # Higher learning rate for large batch
+lr_scheduler_type: "cycle"
+
+# Checkpointing
+ckpt_saving: true
+ckpt_interval: 3
+ckpt_iter: 15000
+
+# Mixup & augmentation
+mixup_pct: 0.33
+use_image_aug: false
+
+# Loss scales
+clip_scale: 1.0
+prior_scale: 0.0    # No prior
+blur_scale: 0.0     # No blurry reconstruction
+
+# No multi-subject checkpoint
+multisubject_ckpt: null 

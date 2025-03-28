@@ -66,7 +66,7 @@ def generate_sbatch_fmri(
     text += f"    {singularity_path} \\\n"
     text += '    /bin/bash -c "\n'
     text += "source /ext3/env.sh\n"
-    text += f"export $(grep -v '^#' {env_file_path} | xargs)\n" if use_env_var else ""
+    # text += f"export $(grep -v '^#' {env_file_path} | xargs)\n" if use_env_var else ""
     text += f"cd {project_dir}\n\n"
 
     text += f"export SSL_CERT_FILE={ssl_cert_file_path}\n"
@@ -132,7 +132,7 @@ default_params = {
         "wandb_log": True,
         "wandb_project": "fmri_new",
         "wandb_entity": "nyu_brain_decoding",
-        "model_name": "perceiver_grad_clip",
+        "model_name": "hierarchical_perceiver",
     },
     "data": {
         "data_path": "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2",
@@ -166,6 +166,11 @@ default_params = {
         "dim_scale_factor": 0,
         "clip_seq_dim": 256,
         "clip_emb_dim": 1664,
+        # Hierarchical Perceiver specific parameters
+        "downsample_factors": "'[2, 2, 2, 2]'",  # Downsampling factors for each level
+        "use_residual": True,  # Whether to use U-Net style residual connections
+        "downsample_method": "grid",  # 'grid' or 'knn'
+        "visualize_hierarchy": True,  # Whether to visualize the hierarchy
     },
     "train": {
         "use_prior": True,
@@ -189,14 +194,15 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [24],
-    # "encoder_hidden_dim": [256, 512],
-    # "encoder_seq_len": [512, 1024, 2048],
+    "batch_size": [16, 24],
+    # Hierarchical Perceiver ablation parameters
+    "downsample_factors": ["'[2, 2, 2, 2]'", "'[4, 2, 2]'", "'[3, 3, 3, 3]'"],
+    "downsample_method": ["grid"],  # "knn" is too slow for most purposes
+    "use_residual": [True, False],
     "head_dim": [32, 64],
-    "num_heads": [6, 8, 12],
-    "n_blocks_decoder": [6, 8],
-    # "nat_depth": [8, 10],
-    "self_per_cross_attn": [1, 2]
+    "num_heads": [8],
+    "self_per_cross_attn": [1, 2],
+    "n_blocks": [4],  # Number of hierarchical levels
 }
 
 job_params = {
@@ -205,12 +211,10 @@ job_params = {
     "constraint": "h100|a100",
     "num_gpus": 2,
     "batch_size": default_params["train"]["batch_size"],
-    "overlay_ext3": "/scratch/ky2684/brain-decoding/fmri-img-reconstruct.ext3",
+    "overlay_ext3": "/scratch/cl6707/DL_ENV/fMRI.ext3",
     "singularity_path": "/scratch/work/public/singularity/cuda12.6.2-cudnn9.5.0-devel-ubuntu24.04.1.sif",
-    "project_dir": "/scratch/ky2684/brain-decoding/Brain_Decoding/Downstream",
-    "use_env_var": True,
-    "env_file_path": "/scratch/ky2684/brain-decoding/Brain_Decoding/.env",
-    "ssl_cert_file_path": "/scratch/ky2684/brain-decoding/Brain_Decoding/tmp/cacert.pem",
+    "project_dir": "/scratch/cl6707/Projects/fmri/Brain_Decoding/Downstream",
+    "ssl_cert_file_path": "/scratch/cl6707/Shared_Datasets/cacert.pem",
 }
 
 if __name__ == "__main__":
