@@ -1,6 +1,7 @@
 import itertools
 import os
 from datetime import datetime
+import hashlib
 
 
 def generate_sbatch_fmri(
@@ -105,15 +106,16 @@ def generate_ablation_jobs(base_params, param_ranges, job_params):
                     params[param_level][name] = value
 
         # Generate a unique job name
-        model_name = f"{model_name_param}_{'_'.join([f'{name}_{value}' for name, value in zip(param_names, values)])}"
-        model_name = model_name + "_single" if job_params["num_gpus"] == 1 else model_name
-        params["base"]["model_name"] = (
-            model_name + f"_{datetime.now().strftime('%Y%m%d')}"
-        )
-        job_name = f"{params['base']['wandb_project']}_{model_name}"
+        params_key = f"{'_'.join([f'{name}_{value}' for name, value in zip(param_names, values)])}"
         
+        # Wandb has a limit of 128 characters on the name, so hashing the name
+        model_name = f"{model_name_param}_{hashlib.md5(params_key.encode()).hexdigest()[:10]}"
+        params["base"]["model_name"] = model_name
+
+        job_name = f"{params['base']['wandb_project']}_{model_name}"
+
         # Generate the job script
-        job_params['batch_size'] = params['train']['batch_size']
+        job_params["batch_size"] = params["train"]["batch_size"]
         job_script = generate_sbatch_fmri(
             job_name=job_name,
             params=params,
@@ -130,7 +132,7 @@ default_params = {
         "wandb_log": True,
         "wandb_project": "fmri_new",
         "wandb_entity": "nyu_brain_decoding",
-        "model_name": "perceiver_grad_clip",
+        "model_name": "linformer_grad_clip",
     },
     "data": {
         "data_path": "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2",
@@ -142,10 +144,12 @@ default_params = {
     },
     "model": {
         "encoder_type": "linformer",
-        "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
+        "decoder_type": "qformer",  # Options: 'qformer', 'perceiver'
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
         "encoder_hidden_dim": 256,
+        "encoder_seq_len": 2048,  # New parameter for linformer
+        "share_kv": False,  # New parameter for linformer
         "use_mixer": False,
         "num_heads": 8,
         "head_dim": 64,  # New parameter for Perceiver
@@ -184,10 +188,17 @@ default_params = {
     },
 }
 
-param_ranges = {"batch_size": [16], "num_epochs": [100]}
+param_ranges = {
+    "batch_size": [16],
+    "encoder_hidden_dim": [256, 512],
+    "encoder_seq_len": [512, 1024, 2048],
+    "head_dim": [32, 64],
+    "num_heads": [6, 8, 12],
+    "nat_depth": [8, 10],
+}
 
 job_params = {
-    "hour": 24,
+    "hour": 48,
     "minute": 00,
     "constraint": "h100|a100",
     "num_gpus": 2,
