@@ -132,7 +132,7 @@ default_params = {
         "wandb_log": True,
         "wandb_project": "fmri_new",
         "wandb_entity": "nyu_brain_decoding",
-        "model_name": "linformer_grad_clip",
+        "model_name": "perceiver_grad_clip",
     },
     "data": {
         "data_path": "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2",
@@ -144,7 +144,7 @@ default_params = {
     },
     "model": {
         "encoder_type": "linformer",
-        "decoder_type": "qformer",  # Options: 'qformer', 'perceiver'
+        "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
         "encoder_hidden_dim": 256,
@@ -189,12 +189,14 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [16],
-    "encoder_hidden_dim": [256, 512],
-    "encoder_seq_len": [512, 1024, 2048],
+    "batch_size": [24],
+    # "encoder_hidden_dim": [256, 512],
+    # "encoder_seq_len": [512, 1024, 2048],
     "head_dim": [32, 64],
     "num_heads": [6, 8, 12],
-    "nat_depth": [8, 10],
+    "n_blocks_decoder": [6, 8],
+    # "nat_depth": [8, 10],
+    "self_per_cross_attn": [1, 2]
 }
 
 job_params = {
