@@ -12,7 +12,7 @@ import json
 from tqdm import tqdm
 import utils
 
-from diffusers.models.vae import Decoder
+from diffusers.models.autoencoders.vae import Decoder
 import sys
 
 # TODO: clean up this file

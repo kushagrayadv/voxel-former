@@ -25,7 +25,6 @@ from kornia.augmentation.container import AugmentationSequential
 from brain_models.brain_transformer import BrainTransformer
 # Add the path for SDXL unCLIP requirements
 sys.path.append('generative_models/')
-import sgm
 from generative_models.sgm.modules.encoders.modules import FrozenOpenCLIPImageEmbedder  # bigG embedder
 
 # Enable tf32 for faster computation
@@ -37,6 +36,7 @@ from utils import save_ckpt
 from dataset import MindEye2Dataset, SubjectBatchSampler, custom_collate_fn
 import re
 from brain_models.models import PriorNetwork, BrainDiffusionPrior
+import pdb
 
 import logging
 logger = logging.getLogger(__name__)  # __name__ = name of the current module
@@ -135,10 +135,18 @@ def build_model(args, device, data_type):
     # model = torch.compile(model)
     logger.info("model parameters:")
     Model_param = utils.count_params(model)
-    logger.info("model.brain_encoder")
-    Brain_Encoder_param = utils.count_params(model.brain_encoder)
-    logger.info("model.brain_decoder")
-    Brain_Decoder_param = utils.count_params(model.brain_decoder)
+
+    if model.brain_encoder:
+        logger.info("model.brain_encoder")
+        Brain_Encoder_param = utils.count_params(model.brain_encoder)
+    else:
+        Brain_Encoder_param = None
+    
+    if model.brain_decoder:
+        logger.info("model.brain_decoder")
+        Brain_Decoder_param = utils.count_params(model.brain_decoder)
+    else:
+        Brain_Decoder_param = None
     param_count_dict = {"Model_param": Model_param, "Brain_Encoder_param": Brain_Encoder_param, "Brain_Decoder_param": Brain_Decoder_param}
     return (
         clip_img_embedder,
@@ -372,7 +380,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         loss_clip = utils.mixco_nce(
                             clip_voxels_norm,
                             clip_target_norm,
-                            temp=.006,
+                            temp=.1,
                             accelerator=accelerator,
                             perm=perm, betas=betas, select=select)
                     else:
@@ -431,8 +439,29 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         pixcorr = utils.pixcorr(image[random_samps], blurry_recon_images)
                         blurry_pixcorr_per_iter = pixcorr.item()
                         blurry_pixcorr += blurry_pixcorr_per_iter
-                utils.check_loss(loss)
+                
+                try:
+                    utils.check_loss(loss)
+                except:
+                    save_ckpt(f'nan_loss_ckpt',
+                                  args,
+                                  accelerator.unwrap_model(model),
+                                  None if diffusion_prior is None else accelerator.unwrap_model(diffusion_prior),
+                                  optimizer,
+                                  lr_scheduler,
+                                  epoch,
+                                  losses,
+                                  test_losses,
+                                  lrs,
+                                  accelerator,
+                                  ckpt_saving=True)
+                    # pdb.set_trace()
+                    raise ValueError
+                                
                 accelerator.backward(loss)
+
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
                 optimizer.step()
 
                 losses.append(loss.item())
@@ -524,7 +553,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
 
                 clip_target = clip_img_embedder(image)
                 for rep in range(3):
-                    backbone0, clip_voxels0, blurry_image_enc_ = model(voxel[:,rep], coords[:,rep])
+                    backbone0, clip_voxels0, blurry_image_enc_= model(voxel[:,rep], coords[:,rep])
                     if rep==0:
                         clip_voxels = clip_voxels0
                         backbone = backbone0
@@ -728,6 +757,7 @@ def main(args: DictConfig) -> None:
     epoch_start, losses, test_losses, lrs, resumed = utils.load_ckpt(
         args=args,
         model=model,
+        diffusion_prior=diffusion_prior,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
         accelerator=accelerator,

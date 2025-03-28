@@ -6,12 +6,18 @@ wandb/
 # notebook
 .ipynb_checkpoints/
 
+#IDEs
+/.idea
+*.iml
+.vscode/
+
 # tran_longs
 train_logs/
 
 # ckpt
 pretraining/ckpt/
 pretraining/wandb/
+Downstream/ckpts/
 
 # test files
 **/test*
@@ -63,8 +69,10 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+.env
 tmp/
 *.out
+outputs/
 
 slurm-logs/
 slurm-raw/

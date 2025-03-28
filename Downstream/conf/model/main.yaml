@@ -2,6 +2,9 @@
 # Model-related hyperparameters and configurations
 # ------------------------------------------------------------------------------
 
+# Encoder type (Used with qformer decoder)
+encoder_type: 'linformer'
+
 # Decoder type
 decoder_type: 'qformer'  # Options: 'qformer', 'perceiver'
 
@@ -9,6 +12,8 @@ decoder_type: 'qformer'  # Options: 'qformer', 'perceiver'
 n_blocks: 4
 decoder_hidden_dim: 1280
 encoder_hidden_dim: 256
+encoder_seq_len: 2048 # New parameter for linformer
+share_kv: False # New parameter for linformer
 use_mixer: false
 num_heads: 8
 head_dim: 64  # New parameter for Perceiver

@@ -9,9 +9,9 @@ defaults:
 
 # Logging
 wandb_log: true
-wandb_project: "BRAIN_NAT"
+wandb_project: "fmri_new"
 wandb_entity: "nyu_brain_decoding"
-model_name: "main_prior"
+model_name: "main_no_prior_linformer"
 
 instance_dir: "outputs/${model_name}/${now:%Y-%m-%d_%H-%M-%S}"
 hydra:

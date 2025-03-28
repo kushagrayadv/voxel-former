@@ -158,6 +158,7 @@ class PerceiverDecoder(nn.Module):
             # Self attention blocks
             for self_attn, self_ff in self_attns:
                 latents = self_attn(latents) + latents
+
                 latents = self_ff(latents) + latents
         
         # Project to output dimensions
@@ -167,8 +168,9 @@ class PerceiverDecoder(nn.Module):
             clip_output = self.clip_head(latents)
         else:
             clip_output = latents
+        
             
         # Placeholder for blurry reconstruction
         b = torch.zeros((batch_size, 2, 1), device=x.device)
         
-        return backbone, clip_output, b 
+        return backbone, clip_output, b
