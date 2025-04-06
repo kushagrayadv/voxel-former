@@ -62,37 +62,62 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 class Attention(nn.Module):
-    def __init__(self, query_dim, context_dim=None, heads=8, dim_head=64, dropout=0.):
+    def __init__(
+        self,
+        query_dim,
+        context_dim=None,
+        heads=8,
+        dim_head=64,
+        dropout=0.0
+    ):
         super().__init__()
-        inner_dim = dim_head * heads
-        context_dim = default(context_dim, query_dim)
+        """
+        This version uses nn.MultiheadAttention internally.  We project
+        x -> Q, context -> K,V, then hand those to MHA and finally map
+        back to query_dim.  This way, PyTorch handles the actual
+        attention ops, including scaling, dropout, etc.
+        """
 
-        self.scale = dim_head ** -0.5
         self.heads = heads
+        self.dim_head = dim_head
+        inner_dim = heads * dim_head
+        context_dim = context_dim if context_dim is not None else query_dim
 
+        # Linear maps from input to Q/K/V of dimension inner_dim
         self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
-        self.to_kv = nn.Linear(context_dim, inner_dim * 2, bias=False)
+        self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
+        self.to_v = nn.Linear(context_dim, inner_dim, bias=False)
 
-        self.dropout = nn.Dropout(dropout)
+        # Use PyTorch's MultiheadAttention
+        # embed_dim = inner_dim => dimension AFTER the linear projection
+        # num_heads = heads
+        # The cross-attention is accomplished by passing Q from x, and K/V from context
+        self.attn = nn.MultiheadAttention(
+            embed_dim=inner_dim,
+            num_heads=heads,
+            dropout=dropout,
+            batch_first=True
+        )
+
+        # Final linear map back to query_dim
         self.to_out = nn.Linear(inner_dim, query_dim)
 
     def forward(self, x, context=None):
-        h = self.heads
+        if context is None:
+            context = x
 
+        # Project input and context to Q, K, V
         q = self.to_q(x)
-        context = default(context, x)
-        k, v = self.to_kv(context).chunk(2, dim=-1)
+        k = self.to_k(context)
+        v = self.to_v(context)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
+        # MultiheadAttention does all the "scaled-dot-product" + dropout + combination
+        # shape of out: [batch, seq_len, inner_dim]
+        out, _ = self.attn(q, k, v, need_weights=False)
 
-        sim = torch.einsum('b i d, b j d -> b i j', q, k) * self.scale
-        attn = sim.softmax(dim=-1)
-        attn = self.dropout(attn)
-
-        out = torch.einsum('b i j, b j d -> b i d', attn, v)
-        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        # Map back to query_dim
         return self.to_out(out)
-
+    
 class CoordinateBasedDownsampling(nn.Module):
     def __init__(self, dim, factor=2, method='grid'):
         super().__init__()
@@ -165,36 +190,6 @@ class CoordinateBasedDownsampling(nn.Module):
                         mapping[i] = first_idx
                 
                 downsampled_coords = batch_coords[mapping]
-                
-            elif self.method == 'knn':
-                # KNN-based downsampling - already slow so focus on grid method
-                # We could optimize this with faiss or other approximate nearest neighbor libraries
-                target_tokens = num_tokens // self.factor
-                
-                # Randomly select initial centroids
-                idx = torch.randperm(num_tokens, device=device)[:target_tokens]
-                centroids = batch_coords[idx]
-                
-                # Try using torch.cdist with fp16 for memory savings if possible
-                with torch.cuda.amp.autocast(enabled=True):
-                    dists = torch.cdist(batch_coords, centroids)
-                assignments = dists.argmin(dim=1)
-                
-                # Pre-allocate tensors for results
-                downsampled_x = torch.zeros((target_tokens, feature_dim), device=device)
-                downsampled_coords = torch.zeros((target_tokens, coords.shape[-1]), device=device)
-                
-                # This loop is harder to vectorize due to variable group sizes
-                # But we can use scatter_add for a bit more efficiency
-                for i in range(target_tokens):
-                    mask = (assignments == i)
-                    count = mask.sum()
-                    if count > 0:
-                        downsampled_x[i] = batch_x[mask].sum(dim=0) / count
-                        downsampled_coords[i] = batch_coords[mask].sum(dim=0) / count
-                    else:
-                        downsampled_x[i] = batch_x[idx[i]]
-                        downsampled_coords[i] = batch_coords[idx[i]]
             
             result_x.append(downsampled_x)
             result_coords.append(downsampled_coords)
@@ -406,5 +401,108 @@ class HierarchicalPerceiverDecoder(nn.Module):
         return backbone, clip_output, b
 
 
-# For backward compatibility, aliasing the old class name to the new one
-PerceiverDecoder = HierarchicalPerceiverDecoder
+class PerceiverDecoder(nn.Module):
+    def __init__(
+        self,
+        h=1280,                  # Hidden dimension
+        out_dim=768,            # Output dimension
+        num_latents=256,        # Number of latent vectors
+        n_blocks=4,             # Number of cross-attention blocks
+        num_heads=8,            # Number of attention heads
+        head_dim=64,           # Dimension per head
+        drop=0.15,
+        clip_scale=1,
+        self_per_cross_attn=1,  # Number of self-attention layers per cross-attention
+        input_dim=1,            # Input dimension (1 for brain signal)
+        coord_dim=3,            # Dimension of coordinate input
+        omega_0=30,             # Frequency for SIREN
+    ):
+        super().__init__()
+        self.clip_scale = clip_scale
+        self.siren_embed = SirenPositionalEmbedding(in_features=coord_dim, out_features=h, omega_0=omega_0)
+        # Initialize learnable latent vectors
+        self.latents = nn.Parameter(torch.randn(1, num_latents, h))
+        
+        # Input projection to map brain signal to hidden dimension
+        self.input_proj = nn.Linear(input_dim, h)
+        
+        # Create layers
+        self.layers = nn.ModuleList([])
+        for _ in range(n_blocks):
+            # Cross attention block
+            cross_attn = PreNorm(h, Attention(
+                query_dim=h,
+                context_dim=h,  # Context is now projected brain signal
+                heads=num_heads,
+                dim_head=head_dim,
+                dropout=drop
+            ), context_dim=h)
+            
+            cross_ff = PreNorm(h, FeedForward(h, dropout=drop))
+            
+            # Self attention blocks
+            self_attns = nn.ModuleList([])
+            for _ in range(self_per_cross_attn):
+                self_attns.append(nn.ModuleList([
+                    PreNorm(h, Attention(h, heads=num_heads, dim_head=head_dim, dropout=drop)),
+                    PreNorm(h, FeedForward(h, dropout=drop))
+                ]))
+            
+            self.layers.append(nn.ModuleList([
+                cross_attn,
+                cross_ff,
+                self_attns
+            ]))
+        
+        # Output projections
+        self.backbone_head = nn.Sequential(
+            nn.LayerNorm(h),
+            nn.Linear(h, out_dim)
+        )
+        
+        if clip_scale > 0:
+            self.clip_head = nn.Sequential(
+                nn.LayerNorm(h),
+                nn.Linear(h, out_dim)
+            )
+        else:
+            self.clip_head = None
+
+    def forward(self, x, coords=None):
+        batch_size = x.shape[0]
+        
+        if coords is not None:
+            pos_embeds = self.siren_embed(coords)
+            x = x + pos_embeds
+        
+        # Project input brain signal to hidden dimension
+        x = self.input_proj(x.unsqueeze(-1))  # Add feature dimension if needed
+        
+        # Expand latents to batch size
+        latents = repeat(self.latents, '1 n d -> b n d', b=batch_size)
+        
+        # Process through layers
+        for cross_attn, cross_ff, self_attns in self.layers:
+            # Cross attention
+            latents = cross_attn(latents, context=x) + latents
+            latents = cross_ff(latents) + latents
+            
+            # Self attention blocks
+            for self_attn, self_ff in self_attns:
+                latents = self_attn(latents) + latents
+
+                latents = self_ff(latents) + latents
+        
+        # Project to output dimensions
+        backbone = self.backbone_head(latents)
+        
+        if self.clip_head is not None:
+            clip_output = self.clip_head(latents)
+        else:
+            clip_output = latents
+        
+            
+        # Placeholder for blurry reconstruction
+        b = torch.zeros((batch_size, 2, 1), device=x.device)
+        
+        return backbone, clip_output, b

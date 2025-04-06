@@ -739,7 +739,9 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         plt.show()
 
             if wandb_log and accelerator.is_main_process:
-                wandb.log(logs, step=global_iteration)
+                # Use end-of-epoch iteration instead of global_iteration
+                epoch_step = (epoch + 1) * num_iterations_per_epoch - 1
+                wandb.log(logs, step=epoch_step)
                 
         # Save model checkpoint and reconstruct
         if (ckpt_saving) and (epoch % ckpt_interval == 0):
