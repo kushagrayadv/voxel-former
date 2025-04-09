@@ -31,6 +31,10 @@ use_residual: true                # Use U-Net style skip connections
 downsample_method: "grid"         # Downsampling method: "grid" or "knn"
 visualize_hierarchy: true         # Visualize hierarchical downsampling
 
+# Varible Perceiver params
+variable_hidden_dims: [128, 256, 512, 1024]
+use_siren_emb: false
+
 # Dropout and progressive-dim scaling
 drop: 0.1
 progressive_dims: true

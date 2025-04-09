@@ -9,10 +9,10 @@ encoder_type: null
 decoder_type: 'perceiver'
 
 # Perceiver variant type
-perceiver_type: 'hierarchical'  # Options: 'original', 'hierarchical'
+perceiver_type: 'variable'  # Options: 'original', 'hierarchical', 'variable'
 
 # Architecture hyperparams
-decoder_hidden_dim: 768
+decoder_hidden_dim: 1280
 num_heads: 8
 head_dim: 64
 self_per_cross_attn: 2
@@ -23,6 +23,10 @@ downsample_factors: [2, 4, 4, 2]  # Aggressive downsampling in middle layers
 use_residual: true                # Use U-Net style skip connections
 downsample_method: "grid"         # Downsampling method: "grid" or "knn" 
 visualize_hierarchy: true         # Visualize hierarchical downsampling
+
+# Varible Perceiver params
+variable_hidden_dims: [128, 256, 512, 1024]
+use_siren_emb: false
 
 # Dropout
 drop: 0.1

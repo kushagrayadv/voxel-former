@@ -2,7 +2,7 @@
 
 defaults:
   - _self_
-  - model: main     # this loads 'model/main.yaml'
+  - model: perceiver     # this loads 'model/main.yaml'
   - train: main     # this loads 'train/main.yaml'
   - data: main      # this loads 'data/main.yaml'
 
@@ -11,7 +11,7 @@ defaults:
 wandb_log: true
 wandb_project: "fmri_new"
 wandb_entity: "nyu_brain_decoding"
-model_name: "perceiver_flash_attn_test"
+model_name: "variable_perceiver_debug"
 
 instance_dir: "outputs/${model_name}/${now:%Y-%m-%d_%H-%M-%S}"
 hydra:

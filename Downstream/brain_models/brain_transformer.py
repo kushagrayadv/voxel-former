@@ -240,7 +240,7 @@ class BrainTransformer(nn.Module):
         super(BrainTransformer, self).__init__()
         model_args = args.model
         from .tomer import Tomer
-        from .perceiver_decoder import HierarchicalPerceiverDecoder, PerceiverDecoder
+        from .perceiver_decoder import HierarchicalPerceiverDecoder, PerceiverDecoder, VariablePerceiverDecoder
         from .linformer import Linformer
 
         self.decoder_type = model_args.decoder_type
@@ -277,6 +277,12 @@ class BrainTransformer(nn.Module):
                     downsample_factors=getattr(model_args, 'downsample_factors', [2, 2, 2, 2]),
                     use_residual=getattr(model_args, 'use_residual', True),
                     downsample_method=getattr(model_args, 'downsample_method', 'grid')
+                )
+            elif perceiver_type == 'variable':
+                del common_params['h']
+                self.brain_decoder = VariablePerceiverDecoder(
+                    **common_params,
+                    h_dims=getattr(model_args, "variable_hidden_dims", [128, 256, 512, 1024]),
                 )
             else:
                 # Use original perceiver without hierarchical processing
