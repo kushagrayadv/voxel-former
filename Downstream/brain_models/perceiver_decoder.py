@@ -274,11 +274,17 @@ class HierarchicalPerceiverDecoder(nn.Module):
         downsample_factors=[2, 2, 2, 2],  # Downsampling factors for each level
         use_residual=True,  # Whether to use U-Net style residual connections
         downsample_method="grid",  # 'grid', 'fps', or 'knn'
+        max_freq=10,
+        num_freq_bands=6,
+        use_siren_embed=True,
     ):
         super().__init__()
         self.clip_scale = clip_scale
         self.n_blocks = n_blocks
         self.use_residual = use_residual
+        self.max_freq = max_freq
+        self.num_freq_bands = num_freq_bands
+        self.use_siren_embed = use_siren_embed
 
         # Ensure downsample_factors has right length
         self.downsample_factors = downsample_factors[:n_blocks]
@@ -291,10 +297,15 @@ class HierarchicalPerceiverDecoder(nn.Module):
         # Input projection to map brain signal to hidden dimension
         self.input_proj = nn.Linear(input_dim, h)
 
-        # Add positional embedding using SIREN
-        self.pos_embed = SirenPositionalEmbedding(
-            in_features=coord_dim, out_features=h, omega_0=omega_0
-        )
+        if use_siren_embed:
+            self.pos_embed = SirenPositionalEmbedding(
+                in_features=coord_dim, out_features=h, omega_0=omega_0
+            )
+            self.pos_emb_proj = None
+        else:
+            self.fourier_encode = fourier_encode
+            pos_emb_dim = coord_dim * num_freq_bands * 2
+            self.pos_emb_proj = nn.Linear(pos_emb_dim, h)
 
         # Create downsampling layers
         self.downsample_layers = nn.ModuleList(
@@ -389,8 +400,18 @@ class HierarchicalPerceiverDecoder(nn.Module):
 
         # Apply positional embedding if coordinates are provided
         if coords is not None:
-            pos_embeds = self.pos_embed(coords)
-            x = x + pos_embeds
+            if self.use_siren_embed:
+                x = x + self.pos_embed(coords)
+            else:
+                pos_embeds = self.fourier_encode(
+                    coords, self.max_freq, self.num_freq_bands
+                )
+                pos_embeds = rearrange(pos_embeds, "... n d -> ... (n d)")
+                if self.pos_emb_proj is not None:
+                    pos_embeds = self.pos_emb_proj(pos_embeds)
+                    x = x + pos_embeds
+                else:
+                    raise ValueError("No position embedding projection provided")
 
         # Create hierarchical inputs
         contexts = [x]

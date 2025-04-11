@@ -8,6 +8,9 @@ encoder_type: 'linformer'
 # Decoder type
 decoder_type: 'perceiver'  # Options: 'qformer', 'perceiver'
 
+# Perceiver variant type
+perceiver_type: 'original'  # Options: 'original', 'hierarchical', 'variable'
+
 # Architecture hyperparams
 n_blocks: 4
 decoder_hidden_dim: 1280
@@ -17,7 +20,7 @@ share_kv: False # New parameter for linformer
 use_mixer: false
 num_heads: 8
 head_dim: 64  # New parameter for Perceiver
-self_per_cross_attn: 1  # New parameter for Perceiver
+self_per_cross_attn: 2  # New parameter for Perceiver
 tome_r: 1000
 last_n_features: 16
 nat_depth: 8
@@ -32,8 +35,8 @@ downsample_method: "grid"         # Downsampling method: "grid" or "knn"
 visualize_hierarchy: true         # Visualize hierarchical downsampling
 
 # Varible Perceiver params
-variable_hidden_dims: [128, 256, 512, 1024]
-use_siren_emb: false
+variable_hidden_dims: [128, 256, 512, 768, 1024, 1280]
+use_siren_emb: true
 
 # Dropout and progressive-dim scaling
 drop: 0.1

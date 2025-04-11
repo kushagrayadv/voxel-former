@@ -145,6 +145,7 @@ default_params = {
     "model": {
         "encoder_type": "linformer",
         "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
+        "perceiver_type": 'hierarchical',  # Options: 'original', 'hierarchical', 'variable',
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
         "encoder_hidden_dim": 256,
@@ -166,11 +167,14 @@ default_params = {
         "dim_scale_factor": 0,
         "clip_seq_dim": 256,
         "clip_emb_dim": 1664,
+        "use_siren_emb": False,         # Learnable position embeddings for Perceiver
         # Hierarchical Perceiver specific parameters
         "downsample_factors": "'[2, 2, 2, 2]'",  # Downsampling factors for each level
         "use_residual": True,  # Whether to use U-Net style residual connections
         "downsample_method": "grid",  # 'grid' or 'knn'
         "visualize_hierarchy": True,  # Whether to visualize the hierarchy
+        # Variable Perceiver params
+        "variable_hidden_dims": "'[128, 256, 512, 768, 1024, 1280]'"
     },
     "train": {
         "use_prior": True,
@@ -194,12 +198,18 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [16, 24],
+    "batch_size": [24],
+    # "n_blocks_decoder": [4],
+    # "head_dim": [64],
+    # "num_heads": [8],
+    # "self_per_cross_attn": [1],
+    # "variable_hidden_dims": ["'[128, 256, 512, 1024]'"],
+
     # Hierarchical Perceiver ablation parameters
-    "downsample_factors": ["'[2, 2, 2, 2]'", "'[4, 2, 2]'", "'[3, 3, 3, 3]'"],
+    "downsample_factors": ["'[4, 2, 2]'", "'[2, 2, 2, 2]'"],
     "downsample_method": ["grid"],  # "knn" is too slow for most purposes
-    "use_residual": [True, False],
-    "head_dim": [32, 64],
+    "use_residual": [False],
+    "head_dim": [64],
     "num_heads": [8],
     "self_per_cross_attn": [1, 2],
     "n_blocks": [4],  # Number of hierarchical levels
@@ -211,10 +221,10 @@ job_params = {
     "constraint": "h100|a100",
     "num_gpus": 2,
     "batch_size": default_params["train"]["batch_size"],
-    "overlay_ext3": "/scratch/cl6707/DL_ENV/fMRI.ext3",
+    "overlay_ext3": "/scratch/ky2684/brain-decoding/fmri-img-reconstruct.ext3",
     "singularity_path": "/scratch/work/public/singularity/cuda12.6.2-cudnn9.5.0-devel-ubuntu24.04.1.sif",
-    "project_dir": "/scratch/cl6707/Projects/fmri/Brain_Decoding/Downstream",
-    "ssl_cert_file_path": "/scratch/cl6707/Shared_Datasets/cacert.pem",
+    "project_dir": "/scratch/ky2684/brain-decoding/Brain_Decoding/Downstream",
+    "ssl_cert_file_path": "/scratch/ky2684/brain-decoding/Brain_Decoding/tmp/cacert.pem",
 }
 
 if __name__ == "__main__":
