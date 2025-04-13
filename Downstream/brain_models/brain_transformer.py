@@ -267,7 +267,8 @@ class BrainTransformer(nn.Module):
                 'input_dim': 1,  # Input dimension is 1 for brain signal
                 'coord_dim': 3,  # Add coordinate dimension
                 'omega_0': 30,   # Add omega_0 for SIREN,
-                'use_siren_embed': model_args.use_siren_emb
+                'use_siren_embed': model_args.use_siren_emb,
+                'use_avg_pool': model_args.use_avg_pool
             }
             
             if perceiver_type == 'hierarchical':

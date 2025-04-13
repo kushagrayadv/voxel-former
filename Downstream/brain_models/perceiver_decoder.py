@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange, repeat
+from einops.layers.torch import Reduce
 from functools import wraps
 import math
 
@@ -277,6 +278,7 @@ class HierarchicalPerceiverDecoder(nn.Module):
         max_freq=10,
         num_freq_bands=6,
         use_siren_embed=True,
+        use_avg_pool=False,
     ):
         super().__init__()
         self.clip_scale = clip_scale
@@ -285,6 +287,7 @@ class HierarchicalPerceiverDecoder(nn.Module):
         self.max_freq = max_freq
         self.num_freq_bands = num_freq_bands
         self.use_siren_embed = use_siren_embed
+        self.use_avg_pool = use_avg_pool
 
         # Ensure downsample_factors has right length
         self.downsample_factors = downsample_factors[:n_blocks]
@@ -383,6 +386,9 @@ class HierarchicalPerceiverDecoder(nn.Module):
                 merge_ff = PreNorm(h, FeedForward(h, dropout=drop))
 
                 self.decoder_blocks.append(nn.ModuleList([merge_attn, merge_ff]))
+        
+        if use_avg_pool:
+            self.avg_pool = Reduce('b n d -> b d', 'mean')
 
         # Output projections
         self.backbone_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
@@ -463,6 +469,9 @@ class HierarchicalPerceiverDecoder(nn.Module):
                 latents = merge_attn(upsampled, context=skip_connection) + upsampled
                 latents = merge_ff(latents) + latents
 
+        if self.use_avg_pool:
+            latents = self.avg_pool(latents)
+
         # Project to output dimensions
         backbone = self.backbone_head(latents)
 
@@ -495,6 +504,7 @@ class PerceiverDecoder(nn.Module):
         max_freq=10,
         num_freq_bands=6,
         use_siren_embed=False,
+        use_avg_pool=False
     ):
         super().__init__()
 
@@ -502,6 +512,7 @@ class PerceiverDecoder(nn.Module):
         self.num_freq_bands = num_freq_bands
         self.clip_scale = clip_scale
         self.use_siren_embed = use_siren_embed
+        self.use_avg_pool = use_avg_pool
 
         if use_siren_embed:
             context_dim = h
@@ -550,6 +561,9 @@ class PerceiverDecoder(nn.Module):
                 self_attns
             ]))
         
+        if use_avg_pool:
+            self.avg_pool = Reduce('b n d -> b d', 'mean')
+
         # Output projections
         self.backbone_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
 
@@ -590,6 +604,9 @@ class PerceiverDecoder(nn.Module):
 
                 latents = self_ff(latents) + latents
 
+        if self.use_avg_pool:
+            latents = self.avg_pool(latents)
+
         # Project to output dimensions
         backbone = self.backbone_head(latents)
 
@@ -622,6 +639,7 @@ class VariablePerceiverDecoder(nn.Module):
         max_freq=10,
         num_freq_bands=6,
         use_siren_embed=False,
+        use_avg_pool=False
     ):
         super().__init__()
 
@@ -631,6 +649,7 @@ class VariablePerceiverDecoder(nn.Module):
         self.num_freq_bands = num_freq_bands
         self.clip_scale = clip_scale
         self.use_siren_embed = use_siren_embed
+        self.use_avg_pool=use_avg_pool
 
         self.fourier_encode = fourier_encode
 
@@ -695,6 +714,9 @@ class VariablePerceiverDecoder(nn.Module):
                 upscale_latents
             ]))
         
+        if use_avg_pool:
+            self.avg_pool = Reduce('b n d -> b d', 'mean')
+
         # Output projections
         self.backbone_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
 
@@ -749,6 +771,8 @@ class VariablePerceiverDecoder(nn.Module):
 
             prev_latents = latents
 
+        if self.use_avg_pool:
+            latents = self.avg_pool(latents)
 
         # Project to output dimensions
         backbone = self.backbone_head(latents)

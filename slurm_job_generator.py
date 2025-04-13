@@ -132,7 +132,7 @@ default_params = {
         "wandb_log": True,
         "wandb_project": "fmri_new",
         "wandb_entity": "nyu_brain_decoding",
-        "model_name": "hierarchical_perceiver",
+        "model_name": "variable_perceiver",
     },
     "data": {
         "data_path": "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2",
@@ -145,7 +145,7 @@ default_params = {
     "model": {
         "encoder_type": "linformer",
         "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
-        "perceiver_type": 'hierarchical',  # Options: 'original', 'hierarchical', 'variable',
+        "perceiver_type": 'variable',  # Options: 'original', 'hierarchical', 'variable',
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
         "encoder_hidden_dim": 256,
@@ -168,6 +168,7 @@ default_params = {
         "clip_seq_dim": 256,
         "clip_emb_dim": 1664,
         "use_siren_emb": False,         # Learnable position embeddings for Perceiver
+        "use_avg_pool": False,
         # Hierarchical Perceiver specific parameters
         "downsample_factors": "'[2, 2, 2, 2]'",  # Downsampling factors for each level
         "use_residual": True,  # Whether to use U-Net style residual connections
@@ -198,21 +199,25 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [24],
-    # "n_blocks_decoder": [4],
-    # "head_dim": [64],
-    # "num_heads": [8],
-    # "self_per_cross_attn": [1],
-    # "variable_hidden_dims": ["'[128, 256, 512, 1024]'"],
+    "batch_size": [32],
+    "use_siren_emb": [True, False],
+    "use_avg_pool": [False],
 
-    # Hierarchical Perceiver ablation parameters
-    "downsample_factors": ["'[4, 2, 2]'", "'[2, 2, 2, 2]'"],
-    "downsample_method": ["grid"],  # "knn" is too slow for most purposes
-    "use_residual": [False],
+    # Variable Perceiver ablations
+    "n_blocks_decoder": [6],
     "head_dim": [64],
     "num_heads": [8],
-    "self_per_cross_attn": [1, 2],
-    "n_blocks": [4],  # Number of hierarchical levels
+    "self_per_cross_attn": [2],
+    "variable_hidden_dims": ["'[128, 256, 512, 768, 1024, 1280]'"],
+
+    # Hierarchical Perceiver ablation parameters
+    # "downsample_factors": ["'[2, 2, 2, 2]'"],
+    # "downsample_method": ["grid"],  # "knn" is too slow for most purposes
+    # "use_residual": [False],
+    # "head_dim": [64],
+    # "num_heads": [8],
+    # "self_per_cross_attn": [2],
+    # "n_blocks": [4],  # Number of hierarchical levels
 }
 
 job_params = {

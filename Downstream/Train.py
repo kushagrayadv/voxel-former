@@ -103,8 +103,8 @@ def build_model(args, device, data_type):
     clip_img_embedder = FrozenOpenCLIPImageEmbedder(
         arch="ViT-bigG-14",
         version="laion2b_s39b_b160k",
-        output_tokens=True,
-        only_tokens=True,
+        output_tokens=False if args.model.use_avg_pool else True,
+        only_tokens=False if args.model.use_avg_pool else True,
     ).to(device)
     logger.info("clip_img_embedder")
     utils.count_params(clip_img_embedder)

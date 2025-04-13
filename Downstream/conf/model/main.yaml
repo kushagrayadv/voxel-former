@@ -9,7 +9,7 @@ encoder_type: 'linformer'
 decoder_type: 'perceiver'  # Options: 'qformer', 'perceiver'
 
 # Perceiver variant type
-perceiver_type: 'original'  # Options: 'original', 'hierarchical', 'variable'
+perceiver_type: 'variable'  # Options: 'original', 'hierarchical', 'variable'
 
 # Architecture hyperparams
 n_blocks: 4
@@ -21,6 +21,7 @@ use_mixer: false
 num_heads: 8
 head_dim: 64  # New parameter for Perceiver
 self_per_cross_attn: 2  # New parameter for Perceiver
+use_avg_pool: false   # New parameter for Perceiver
 tome_r: 1000
 last_n_features: 16
 nat_depth: 8
@@ -30,7 +31,7 @@ n_blocks_decoder: 6
 
 # Hierarchical Perceiver parameters
 downsample_factors: [2, 2, 2, 2]  # Controls token reduction at each level
-use_residual: true                # Use U-Net style skip connections
+use_residual: false               # Use U-Net style skip connections
 downsample_method: "grid"         # Downsampling method: "grid" or "knn"
 visualize_hierarchy: true         # Visualize hierarchical downsampling
 
