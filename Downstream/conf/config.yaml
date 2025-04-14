@@ -8,7 +8,7 @@ defaults:
 
 
 # Logging
-wandb_log: true
+wandb_log: False
 wandb_project: "fmri_new"
 wandb_entity: "nyu_brain_decoding"
 model_name: "variable_perceiver_debug"
