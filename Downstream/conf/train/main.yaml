@@ -3,11 +3,11 @@
 # ------------------------------------------------------------------------------
 
 # Whether to use the diffusion prior (True) or just retrieval (False)
-use_prior: true
+use_prior: false
 blurry_recon: false
 
 # General training params
-batch_size: 32
+batch_size: 48
 global_batch_size: null
 num_epochs: 150
 seed: 42

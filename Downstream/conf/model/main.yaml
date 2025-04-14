@@ -21,7 +21,7 @@ use_mixer: false
 num_heads: 8
 head_dim: 64  # New parameter for Perceiver
 self_per_cross_attn: 2  # New parameter for Perceiver
-use_avg_pool: false   # New parameter for Perceiver
+use_avg_pool: true   # New parameter for Perceiver
 tome_r: 1000
 last_n_features: 16
 nat_depth: 8
@@ -47,4 +47,4 @@ dim_scale_factor: 0
 
 # output
 clip_seq_dim: 256
-clip_emb_dim: 1664
+clip_emb_dim: 1280

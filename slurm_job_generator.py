@@ -199,9 +199,12 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [32],
+    "batch_size": [48],
     "use_siren_emb": [True, False],
-    "use_avg_pool": [False],
+    "use_avg_pool": [True],
+    "clip_seq_dim": [256, 128, 64],
+    "clip_emb_dim": [1280],
+    "use_prior": [False],
 
     # Variable Perceiver ablations
     "n_blocks_decoder": [6],

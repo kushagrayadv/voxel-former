@@ -11,7 +11,7 @@ defaults:
 wandb_log: true
 wandb_project: "fmri_new"
 wandb_entity: "nyu_brain_decoding"
-model_name: "original_perceiver_debug"
+model_name: "variable_perceiver_debug"
 
 instance_dir: "outputs/${model_name}/${now:%Y-%m-%d_%H-%M-%S}"
 hydra:
