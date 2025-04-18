@@ -718,7 +718,8 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         clip_voxels_norm,
                         clip_target_norm,
                         accelerator=accelerator,
-                        temp=.006)
+                        temp=.006,
+                        is_eval=True)
 
                     test_loss_clip_total += loss_clip.item()
                     loss_clip = loss_clip * clip_scale

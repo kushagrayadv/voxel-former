@@ -3,6 +3,7 @@ from torchvision import transforms
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
 from torchinfo import summary
 import PIL
 import random
@@ -139,11 +140,11 @@ def gather_features(image_features, voxel_features, accelerator):
 #     loss = (loss1 + loss2)/2
 #     return loss
 
-def soft_clip_loss(preds, targs, accelerator=None, temp=0.125):
+def soft_clip_loss(preds, targs, accelerator=None, temp=0.125, is_eval=False):
     # Gather tensors across all GPUs if using distributed training
     if accelerator is not None and accelerator.num_processes > 1:
-        preds = torch.cat(torch.distributed.nn.all_gather(preds), dim=0)
-        targs = torch.cat(torch.distributed.nn.all_gather(targs), dim=0)
+        preds = torch.cat(torch.distributed.nn.all_gather(preds), dim=0) if not is_eval else gather_tensors_across_gpus(preds)
+        targs = torch.cat(torch.distributed.nn.all_gather(targs), dim=0) if not is_eval else gather_tensors_across_gpus(targs)
     
     clip_clip = (targs @ targs.T) / temp
     brain_clip = (preds @ targs.T) / temp
@@ -244,7 +245,22 @@ def mixco_nce(preds, targs, temp=0.1, perm=None, betas=None, select=None, distri
             loss = (loss + loss2)/2
 
     return loss
+
+def gather_tensors_across_gpus(x):
+    local_len = torch.tensor(x.shape[0], device=x.device)
+
+    world_size = dist.get_world_size()
+    all_lengths = [torch.zeros_like(local_len) for _ in range(world_size)]
+    dist.all_gather(all_lengths, local_len)
+    min_len = torch.stack(all_lengths).min().item()
     
+    x_reduced = x[:min_len]
+    x_gathered = [torch.zeros_like(x_reduced) for _ in range(world_size)]
+    dist.all_gather(x_gathered, x_reduced)
+
+    return torch.cat(x_gathered, dim=0)
+    
+
 def count_params(model):
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
