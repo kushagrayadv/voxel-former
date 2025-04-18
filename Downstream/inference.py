@@ -18,13 +18,16 @@ from Train import (
 import utils
 from matplotlib import pyplot as plt
 from torchvision import transforms
+from hydra.utils import get_original_cwd
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "generative_models")))
 from generative_models.sgm.models.diffusion import DiffusionEngine
 from generative_models.sgm.modules.encoders.modules import FrozenOpenCLIPImageEmbedder, FrozenOpenCLIPEmbedder2
 
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CACHE_DIR = os.environ.get("CACHE_DIR", "/scratch/yz10381/CODES/IVP/inference/Brain_Decoding/cache_dir")
+CACHE_DIR = os.environ.get("CACHE_DIR", "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2")
 
 def validation_test(
     args,
@@ -36,6 +39,7 @@ def validation_test(
     device,
     save_dir="test",
     num_eval_samples=None,
+    generate_imgs=True
 ):
     os.makedirs(save_dir, exist_ok=True)
     plotting = True
@@ -219,11 +223,13 @@ def validation_test(
 
         for k, v in logs.items():
             print(f"{k}: {v}")
+        
         # Save logs to file
         with open(f"{save_dir}/losses.json", 'w') as f:
             json.dump(logs, f, indent=4)
+        
         # generate images after computing test loss
-        if use_prior:
+        if use_prior and generate_imgs:
             # sort the test samples by image index
             infos = []
             image_idx_to_samples = defaultdict(lambda: [[], [], [], [], []])
@@ -290,8 +296,12 @@ def validation_test(
                 #     pixcorr = utils.pixcorr(image[random_samps], blurry_recon_images)
                 #     test_blurry_pixcorr += pixcorr.item()
                 infos.append(info)
+            
             with open(f"{save_dir}/infos.json", "w") as f:
                 json.dump(infos, f, indent=4)
+
+        return logs
+
 def load_validation_components(device):
     # prep unCLIP
     config = OmegaConf.load(f"{FILE_DIR}/generative_models/configs/unclip6.yaml")
@@ -362,7 +372,7 @@ def load_validation_components(device):
 
     return vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine, # for text generation
     
-@hydra.main(config_path=None, config_name='config')
+@hydra.main(config_path="conf", config_name='config')
 def main(args: DictConfig):
     # Load the model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -382,25 +392,67 @@ def main(args: DictConfig):
     print(f"len(test_losses): {len(test_losses)}, mean(test_losses): {np.mean(test_losses)}")
     print(f"len(lrs): {len(lrs)}")
     print(f"resumed: {resumed}")
-    train_dl, test_dl, num_test, num_iterations_per_epoch = prepare_data(args, data_type)
-    print(f"train_dl: {train_dl}, len(train_dl): {len(train_dl)}")
-    print(f"test_dl: {test_dl}, len(test_dl): {len(test_dl)}")
-
+    
     vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine = load_validation_components(device)
     # vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine = None, None, None, None, None
-    SAVE_DIR=os.environ.get("SAVE_DIR", "tests")
-    save_dir = osp.join(SAVE_DIR, f"epoch{epoch_start}_subj{args.data.subj}")
-    validation_test(
-        args,
-        model, clip_img_embedder, diffusion_prior,
-        autoenc, cnx, mean, std, blur_augs, # these are for blurry recon
-        vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine, # these are for text generation
-        test_dl,
-        epoch_start,
-        device,
-        save_dir=save_dir,
-        num_eval_samples=100
-    )
+
+    assert len(args.data.multi_subject) > 0, "list of subjects should be greater than 0"
+
+    subj_losses_logs = []
+    for subj in args.data.multi_subject:
+        print(f"Testing model for subject: {subj}")
+        
+        args.data.subj = subj
+        train_dl, test_dl, _, _ = prepare_data(args, data_type)
+        
+        print(f"train_dl: {train_dl}, len(train_dl): {len(train_dl)}")
+        print(f"test_dl: {test_dl}, len(test_dl): {len(test_dl)}")
+
+        original_cwd = get_original_cwd()
+        SAVE_DIR=os.environ.get("SAVE_DIR", "tests")
+        save_dir = osp.join(os.path.join(original_cwd, SAVE_DIR, args.model_name), f"epoch{epoch_start}_subj{subj}")
+        
+        loss_logs = validation_test(
+            args,
+            model, clip_img_embedder, diffusion_prior,
+            autoenc, cnx, mean, std, blur_augs, # these are for blurry recon
+            vector_suffix, clip_text_model, clip_convert, processor, diffusion_engine, # these are for text generation
+            test_dl,
+            epoch_start,
+            device,
+            save_dir=save_dir,
+            num_eval_samples=100,
+            generate_imgs=False
+        )
+        subj_losses_logs.append(loss_logs)
+    
+    if len(args.data.multi_subject) > 1:
+        print(f"Generating avg loss values for subjects")
+        losses_avg_log = {
+            "epoch/epoch": 0,
+            "epoch/test_loss": 0.,
+            "epoch/test_fwd_acc": 0.,
+            "epoch/test_bwd_acc": 0.,
+            "epoch/test_loss_clip": 0.,
+            "epoch/test_loss_prior": 0.,
+            "epoch/test_recon_cossim": 0.,
+            "epoch/test_recon_mse": 0.,
+            "epoch/eval_fwd_acc": 0.,
+            "epoch/eval_bwd_acc": 0.
+        }
+        save_dir = osp.join(os.path.join(original_cwd, SAVE_DIR, args.model_name), f"epoch{epoch_start}_subjs_losses_avg")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        for log_i, loss_log in enumerate(subj_losses_logs):
+            for k, v in loss_log.items():
+                losses_avg_log[k] += v
+                
+        losses_avg_log = {k: v / (log_i+1) for k, v in losses_avg_log.items()}
+        print(losses_avg_log)
+
+        with open(f"{save_dir}/losses.json", 'w') as f:
+                json.dump(losses_avg_log, f, indent=4)
+
 
 if __name__ == "__main__":
     main()
