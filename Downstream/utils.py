@@ -219,28 +219,22 @@ def mixco_nce(preds, targs, temp=0.1, perm=None, betas=None, select=None, distri
             betas = accelerator.gather(betas)
         if perm is not None:
             perm = accelerator.gather(perm.to(preds.device)) # perm is not cuda
-    output = {}
     
 
     brain_clip = (preds @ targs.T)/temp
-    output['brain_clip'] = brain_clip
     
     if perm is not None and betas is not None and select is not None:
         probs = torch.diag(betas)
         probs[torch.arange(preds.shape[0]).to(preds.device), perm] = 1 - betas
 
         brain_clip_softmax = brain_clip.log_softmax(-1)
-        output['brain_clip_softmax'] = brain_clip_softmax
         
         loss = -(brain_clip_softmax * probs).sum(-1).mean()
-        output['loss_1'] = loss
 
         if bidirectional:
             loss2 = -(brain_clip_softmax * probs.T).sum(-1).mean()
-            output['loss_2'] = loss2
             
             loss = (loss + loss2)/2
-            output['loss_avg'] = loss
 
 
     else:
