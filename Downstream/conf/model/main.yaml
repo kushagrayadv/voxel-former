@@ -22,6 +22,7 @@ num_heads: 8
 head_dim: 64  # New parameter for Perceiver
 self_per_cross_attn: 2  # New parameter for Perceiver
 use_avg_pool: false   # New parameter for Perceiver
+mlp_clip_head: false
 tome_r: 1000
 last_n_features: 16
 nat_depth: 8

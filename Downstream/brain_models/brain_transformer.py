@@ -268,7 +268,8 @@ class BrainTransformer(nn.Module):
                 'coord_dim': 3,  # Add coordinate dimension
                 'omega_0': 30,   # Add omega_0 for SIREN,
                 'use_siren_embed': model_args.use_siren_emb,
-                'use_avg_pool': model_args.use_avg_pool
+                'use_avg_pool': model_args.use_avg_pool,
+                'mlp_clip_head': model_args.mlp_clip_head
             }
             
             if perceiver_type == 'hierarchical':

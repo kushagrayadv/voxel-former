@@ -504,7 +504,8 @@ class PerceiverDecoder(nn.Module):
         max_freq=10,
         num_freq_bands=6,
         use_siren_embed=False,
-        use_avg_pool=False
+        use_avg_pool=False,
+        mlp_clip_head=False
     ):
         super().__init__()
 
@@ -568,7 +569,20 @@ class PerceiverDecoder(nn.Module):
         self.backbone_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
 
         if clip_scale > 0:
-            self.clip_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
+            if mlp_clip_head:
+                self.clip_head = nn.Sequential(
+                    nn.LayerNorm(h),
+                    nn.GELU(),
+                    nn.Linear(h, h),
+                    nn.LayerNorm(h),
+                    nn.GELU(),
+                    nn.Linear(h, h),
+                    nn.LayerNorm(h),
+                    nn.GELU(),
+                    nn.Linear(h, out_dim),
+                )
+            else:
+                self.clip_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
         else:
             self.clip_head = None
 
@@ -639,7 +653,8 @@ class VariablePerceiverDecoder(nn.Module):
         max_freq=10,
         num_freq_bands=6,
         use_siren_embed=False,
-        use_avg_pool=False
+        use_avg_pool=False,
+        mlp_clip_head=False
     ):
         super().__init__()
 
@@ -721,7 +736,20 @@ class VariablePerceiverDecoder(nn.Module):
         self.backbone_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
 
         if clip_scale > 0:
-            self.clip_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
+            if mlp_clip_head:
+                self.clip_head = nn.Sequential(
+                    nn.LayerNorm(h),
+                    nn.GELU(),
+                    nn.Linear(h, h),
+                    nn.LayerNorm(h),
+                    nn.GELU(),
+                    nn.Linear(h, h),
+                    nn.LayerNorm(h),
+                    nn.GELU(),
+                    nn.Linear(h, out_dim),
+                )
+            else:
+                self.clip_head = nn.Sequential(nn.LayerNorm(h), nn.Linear(h, out_dim))
         else:
             self.clip_head = None
 

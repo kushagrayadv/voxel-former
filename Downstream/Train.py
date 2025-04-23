@@ -893,8 +893,19 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
 
     logger.info("\n===Finished!===\n")
     if ckpt_saving and accelerator.is_main_process:
-        save_ckpt(f'last',args,accelerator.unwrap_model(model),optimizer,lr_scheduler,epoch, losses, test_losses, lrs, accelerator, ckpt_saving=True)
-
+        save_ckpt(f'last',
+                    args,
+                    accelerator.unwrap_model(model),
+                    None if diffusion_prior is None else accelerator.unwrap_model(diffusion_prior),
+                    optimizer,
+                    lr_scheduler,
+                    epoch,
+                    losses,
+                    test_losses,
+                    lrs,
+                    accelerator,
+                    ckpt_saving=True)
+    
 @hydra.main(config_path="conf", config_name="config")
 def main(args: DictConfig) -> None:
     # Add default values for hierarchical perceiver parameters if not present
@@ -970,6 +981,9 @@ def main(args: DictConfig) -> None:
     if args.wandb_log and accelerator.is_main_process:
         wandb.log(param_count_dict)
     optimizer, lr_scheduler = setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch)
+
+    # utils.attach_hooks_for_nan(model.brain_decoder)
+    # utils.attach_hooks_for_nan(diffusion_prior.net)
 
     # Load checkpoint if exists
     epoch_start, losses, test_losses, lrs, resumed = utils.load_ckpt(

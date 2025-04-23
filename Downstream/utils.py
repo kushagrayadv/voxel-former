@@ -524,3 +524,25 @@ def show_model_summary(model, input_size):
             col_width=20,
             row_settings=["var_names"],
             verbose=2)
+
+# === Forward hook: catch NaNs in outputs ===
+def detect_nan_hook(name):
+    def hook(module, input, output):
+        outputs = output if isinstance(output, (tuple, list)) else [output]
+        for idx, out in enumerate(outputs):
+            if torch.isnan(out).any():
+                print(f"[NaN DETECTED] in forward output of: {name, module}")
+    return hook
+
+# === Backward hook: catch NaNs in gradients ===
+def detect_grad_nan_hook(name):
+    def hook(module, grad_input, grad_output):
+        if any(torch.isnan(g).any() for g in grad_output if g is not None):
+            print(f"[NaN DETECTED] in backward grad of: {name, module}")
+    
+    return hook
+
+def attach_hooks_for_nan(model):
+    for name, mod in model.named_modules():
+        mod.register_forward_hook(detect_nan_hook(name))
+        mod.register_full_backward_hook(detect_grad_nan_hook(name))
