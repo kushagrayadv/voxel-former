@@ -187,7 +187,7 @@ default_params = {
         "max_lr": 5.0e-05,
         "lr_scheduler_type": "cycle",
         "ckpt_saving": True,
-        "ckpt_interval": 3,
+        "ckpt_interval": 1,
         "ckpt_iter": 15000,
         "mixup_pct": 0.33,
         "use_image_aug": False,
