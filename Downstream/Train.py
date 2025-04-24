@@ -647,44 +647,7 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                 voxel = test_voxel[test_indices]
                 coords = test_coords[test_indices]
                 image = test_image[test_indices]
-                ## Average same-image repeats ##
-                if test_image is None:
-                    voxel = voxels
-                    image = image_idx
-                    unique_image, sort_indices = torch.unique(image, return_inverse=True) # this will break multi gpu inference if wanting to do all clip
-                    for im in unique_image:
-                        locs = torch.where(im == image_idx)[0]
-                        if len(locs)==1:
-                            locs = locs.repeat(3)
-                        elif len(locs)==2:
-                            locs = locs.repeat(2)[:3]
-                        assert len(locs)==3
-                        if test_image is None:
-                            test_image = torch.Tensor(images[locs,0][None])
-                            test_voxel = voxels[locs][None]
-                            test_coords = coords[locs][None]
-                        else:
-                            test_image = torch.vstack((test_image, torch.Tensor(images[locs,0][None])))
-                            test_voxel = torch.vstack((test_voxel, voxels[locs][None]))
-                            test_coords = torch.vstack((test_coords, coords[locs][None]))
-                loss=0.
-                            
-                test_indices = torch.arange(len(test_voxel))
-                voxel = test_voxel[test_indices]
-                coords = test_coords[test_indices]
-                image = test_image[test_indices]
 
-                clip_target = clip_img_embedder(image)
-                for rep in range(3):
-                    backbone0, clip_voxels0, blurry_image_enc_= model(voxel[:,rep], coords[:,rep])
-                    if rep==0:
-                        clip_voxels = clip_voxels0
-                        backbone = backbone0
-                    else:
-                        clip_voxels += clip_voxels0
-                        backbone += backbone0
-                clip_voxels /= 3
-                backbone /= 3
                 clip_target = clip_img_embedder(image)
                 for rep in range(3):
                     backbone0, clip_voxels0, blurry_image_enc_= model(voxel[:,rep], coords[:,rep])

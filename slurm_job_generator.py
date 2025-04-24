@@ -107,9 +107,11 @@ def generate_ablation_jobs(base_params, param_ranges, job_params):
 
         # Generate a unique job name
         params_key = f"{'_'.join([f'{name}_{value}' for name, value in zip(param_names, values)])}"
-        
+
         # Wandb has a limit of 128 characters on the name, so hashing the name
-        model_name = f"{model_name_param}_{hashlib.md5(params_key.encode()).hexdigest()[:10]}"
+        model_name = (
+            f"{model_name_param}_{hashlib.md5(params_key.encode()).hexdigest()[:10]}"
+        )
         params["base"]["model_name"] = model_name
 
         job_name = f"{params['base']['wandb_project']}_{model_name}"
@@ -145,7 +147,7 @@ default_params = {
     "model": {
         "encoder_type": "linformer",
         "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
-        "perceiver_type": 'variable',  # Options: 'original', 'hierarchical', 'variable',
+        "perceiver_type": "variable",  # Options: 'original', 'hierarchical', 'variable',
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
         "encoder_hidden_dim": 256,
@@ -167,15 +169,16 @@ default_params = {
         "dim_scale_factor": 0,
         "clip_seq_dim": 256,
         "clip_emb_dim": 1664,
-        "use_siren_emb": False,         # Learnable position embeddings for Perceiver
+        "use_siren_emb": False,  # Learnable position embeddings for Perceiver
         "use_avg_pool": False,
+        "mlp_clip_head": False,
         # Hierarchical Perceiver specific parameters
         "downsample_factors": "'[2, 2, 2, 2]'",  # Downsampling factors for each level
         "use_residual": True,  # Whether to use U-Net style residual connections
         "downsample_method": "grid",  # 'grid' or 'knn'
         "visualize_hierarchy": True,  # Whether to visualize the hierarchy
         # Variable Perceiver params
-        "variable_hidden_dims": "'[128, 256, 512, 768, 1024, 1280]'"
+        "variable_hidden_dims": "'[128, 256, 512, 768, 1024, 1280]'",
     },
     "train": {
         "use_prior": True,
@@ -199,17 +202,21 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [32],
+    "batch_size": [21],
     "use_siren_emb": [True, False],
-    "use_avg_pool": [False],
-
+    # "use_avg_pool": [True],
+    "mlp_clip_head": [True],
+    # "use_prior": [False],
+    # "clip_seq_dim": [256],
+    # "clip_emb_dim": [1280],
+    
     # Variable Perceiver ablations
     "n_blocks_decoder": [6],
     "head_dim": [64],
     "num_heads": [8],
     "self_per_cross_attn": [2],
     "variable_hidden_dims": ["'[128, 256, 512, 768, 1024, 1280]'"],
-
+    
     # Hierarchical Perceiver ablation parameters
     # "downsample_factors": ["'[2, 2, 2, 2]'"],
     # "downsample_method": ["grid"],  # "knn" is too slow for most purposes
