@@ -591,20 +591,6 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                 if len(images) != args.train.batch_size:
                     logger.info(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {len(images)}")
                     continue
-        # if accelerator.is_main_process:
-        with torch.no_grad(), torch.amp.autocast('cuda'): 
-            # Add progress bar for test dataloader
-            test_progress = tqdm(test_dl, desc=f'Testing epoch {epoch}', leave=False, 
-                                disable=not accelerator.is_local_main_process)
-            for test_i, (images, voxels, subj_idx, coords, image_idx) in enumerate(test_progress):
-                images = images.to(device)
-                voxels = voxels.to(device)
-                coords = coords.to(device)
-                image_idx = image_idx.to(device)
-                # all test samples should be loaded per batch such that test_i should never exceed 0
-                if len(images) != args.train.batch_size:
-                    logger.info(f"Warning: Batch size mismatch. Expected {args.train.batch_size}, got {len(images)}")
-                    continue
 
                 # Update progress bar description with current metrics
                 if test_i > 0:  # Only update if we have accumulated some metrics
@@ -674,7 +660,8 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         clip_voxels_norm,
                         clip_target_norm,
                         accelerator=accelerator,
-                        temp=.006)
+                        temp=.006,
+                        is_eval=True)
 
                     test_loss_clip_total += loss_clip.item()
                     loss_clip = loss_clip * clip_scale
