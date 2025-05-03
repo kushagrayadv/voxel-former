@@ -76,12 +76,15 @@ class GEGLU(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, dim, mult=4, dropout=0.0):
+    def __init__(self, dim, mult=4, dropout=0.0, out_dim=None):
         super().__init__()
+        if out_dim is None:
+            out_dim = dim
+
         self.net = nn.Sequential(
             nn.Linear(dim, dim * mult * 2),
             GEGLU(),
-            nn.Linear(dim * mult, dim),
+            nn.Linear(dim * mult, out_dim),
             nn.Dropout(dropout),
         )
 
@@ -716,7 +719,7 @@ class VariablePerceiverDecoder(nn.Module):
             upscale_latents = None
             if not h == h_dims[-1]:
                 block_out_dim = h_dims[i+1]
-                upscale_latents = PreNorm(h, nn.Linear(h, block_out_dim))
+                upscale_latents = PreNorm(h, FeedForward(h, out_dim=block_out_dim))
 
             self.latents.append(latent)
                 

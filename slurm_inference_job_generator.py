@@ -36,12 +36,12 @@ def generate_sbatch_fmri(
     text = "#!/bin/bash\n\n"
     text += f"#SBATCH --job-name={job_name}\n"
     text += "#SBATCH --nodes=1\n"
-    text += "#SBATCH --cpus-per-task=16\n"
+    text += "#SBATCH --cpus-per-task=8\n"
     text += "#SBATCH --mem=64GB\n"
     text += f"#SBATCH --time={hour}:{minute:02d}:00\n"
     text += f"#SBATCH --gres=gpu:{num_gpus}\n"
     text += f'#SBATCH --constraint="{constraint}"\n'
-    text += "#SBATCH --account=pr_60_tandon_advanced\n"
+    text += "#SBATCH --account=pr_60_tandon_priority\n"
     text += "#SBATCH --output=./slurm-logs/%x-%j.out\n"
     text += "#SBATCH --error=./slurm-logs/%x-%j.err\n\n"
 
@@ -196,7 +196,7 @@ default_params = {
 
 param_ranges = {
     "batch_size": [21],
-    "use_siren_emb": [True],
+    "use_siren_emb": [False],
     # "use_avg_pool": [True],
     "mlp_clip_head": [True],
     # "use_prior": [False],
@@ -204,11 +204,11 @@ param_ranges = {
     # "clip_emb_dim": [1280],
     
     # Variable Perceiver ablations
-    "n_blocks_decoder": [6],
-    "head_dim": [64],
+    "n_blocks_decoder": [8],
+    "head_dim": [128],
     "num_heads": [8],
     "self_per_cross_attn": [2],
-    "variable_hidden_dims": ["'[128, 256, 512, 768, 1024, 1280]'"],
+    "variable_hidden_dims": ["'[128, 185, 266, 384, 554, 800, 1154, 1664]'"],
     
     # Hierarchical Perceiver ablation parameters
     # "downsample_factors": ["'[2, 2, 2, 2]'"],
@@ -221,7 +221,7 @@ param_ranges = {
 }
 
 job_params = {
-    "hour": 2,
+    "hour": 1,
     "minute": 00,
     "constraint": "h100|a100",
     "num_gpus": 1,

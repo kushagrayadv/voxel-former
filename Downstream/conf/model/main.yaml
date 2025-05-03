@@ -19,7 +19,7 @@ encoder_seq_len: 2048 # New parameter for linformer
 share_kv: False # New parameter for linformer
 use_mixer: false
 num_heads: 8
-head_dim: 64  # New parameter for Perceiver
+head_dim: 128  # New parameter for Perceiver
 self_per_cross_attn: 2  # New parameter for Perceiver
 use_avg_pool: false   # New parameter for Perceiver
 mlp_clip_head: false
@@ -28,7 +28,7 @@ last_n_features: 16
 nat_depth: 8
 nat_num_neighbors: 8
 full_attention: true
-n_blocks_decoder: 6
+n_blocks_decoder: 8
 
 # Hierarchical Perceiver parameters
 downsample_factors: [2, 2, 2, 2]  # Controls token reduction at each level
@@ -37,7 +37,7 @@ downsample_method: "grid"         # Downsampling method: "grid" or "knn"
 visualize_hierarchy: true         # Visualize hierarchical downsampling
 
 # Varible Perceiver params
-variable_hidden_dims: [128, 256, 512, 768, 1024, 1280]
+variable_hidden_dims: [128, 185, 266, 384, 554, 800, 1154, 1664]
 use_siren_emb: true
 
 # Dropout and progressive-dim scaling
