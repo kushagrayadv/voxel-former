@@ -191,7 +191,7 @@ class BrainDecoder(nn.Module):
         #         nn.Conv2d(512, 512, 1, bias=True),
         #     )
 
-    def forward(self, x, coords):
+    def forward(self, x, coords=None):
         batch_size = x.shape[0]
         # Expand queries to batch size
         cross_attn_output = self.queries.repeat(batch_size, 1, 1)

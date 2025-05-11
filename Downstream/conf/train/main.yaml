@@ -7,7 +7,7 @@ use_prior: true
 blurry_recon: false
 
 # General training params
-batch_size: 32
+batch_size: 16
 global_batch_size: null
 num_epochs: 150
 seed: 42
@@ -16,7 +16,8 @@ seed: 42
 max_lr: 5.0e-05
 lr_scheduler_type: "cycle"
 
-
+# Gradient clipping
+use_grad_clip: true
 
 # Checkpointing
 ckpt_saving: true

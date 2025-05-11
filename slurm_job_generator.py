@@ -41,7 +41,7 @@ def generate_sbatch_fmri(
     text += f"#SBATCH --time={hour}:{minute:02d}:00\n"
     text += f"#SBATCH --gres=gpu:{num_gpus}\n"
     text += f'#SBATCH --constraint="{constraint}"\n'
-    text += "#SBATCH --account=pr_60_tandon_advanced\n"
+    text += "#SBATCH --account=pr_60_tandon_priority\n"
     text += "#SBATCH --output=./slurm-logs/%x-%j.out\n"
     text += "#SBATCH --error=./slurm-logs/%x-%j.err\n\n"
 
@@ -134,7 +134,7 @@ default_params = {
         "wandb_log": True,
         "wandb_project": "fmri_new",
         "wandb_entity": "nyu_brain_decoding",
-        "model_name": "variable_perceiver",
+        "model_name": "tomer_qformer",
     },
     "data": {
         "data_path": "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2",
@@ -145,8 +145,8 @@ default_params = {
         "new_test": True,
     },
     "model": {
-        "encoder_type": "linformer",
-        "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
+        "encoder_type": "tomer",
+        "decoder_type": "qformer",  # Options: 'qformer', 'perceiver'
         "perceiver_type": "variable",  # Options: 'original', 'hierarchical', 'variable',
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
@@ -202,20 +202,22 @@ default_params = {
 }
 
 param_ranges = {
-    "batch_size": [21],
-    "use_siren_emb": [False],
+    "batch_size": [32],
+    "nat_depth": [2],
+    "n_blocks_decoder": [2],
+    # "use_siren_emb": [False],
     # "use_avg_pool": [True],
-    "mlp_clip_head": [True],
+    # "mlp_clip_head": [True],
     # "use_prior": [False],
     # "clip_seq_dim": [256],
     # "clip_emb_dim": [1280],
     
     # Variable Perceiver ablations
-    "n_blocks_decoder": [8],
-    "head_dim": [128],
-    "num_heads": [8],
-    "self_per_cross_attn": [2],
-    "variable_hidden_dims": ["'[128, 185, 266, 384, 554, 800, 1154, 1664]'"],
+    # "n_blocks_decoder": [8],
+    # "head_dim": [128],
+    # "num_heads": [8],
+    # "self_per_cross_attn": [2],
+    # "variable_hidden_dims": ["'[128, 185, 266, 384, 554, 800, 1154, 1664]'"],
     
     # Hierarchical Perceiver ablation parameters
     # "downsample_factors": ["'[2, 2, 2, 2]'"],
