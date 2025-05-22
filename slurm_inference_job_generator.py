@@ -127,7 +127,7 @@ default_params = {
         "wandb_log": True,
         "wandb_project": "fmri_new",
         "wandb_entity": "nyu_brain_decoding",
-        "model_name": "variable_perceiver",
+        "model_name": "tomer_qformer",
     },
     "data": {
         "data_path": "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2",
@@ -138,8 +138,8 @@ default_params = {
         "new_test": True,
     },
     "model": {
-        "encoder_type": "linformer",
-        "decoder_type": "perceiver",  # Options: 'qformer', 'perceiver'
+        "encoder_type": "tomer",
+        "decoder_type": "qformer",  # Options: 'qformer', 'perceiver'
         "perceiver_type": "variable",  # Options: 'original', 'hierarchical', 'variable',
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
@@ -191,24 +191,28 @@ default_params = {
         "blur_scale": 0.5,  # only applies when model.blurry_recon is True
         "prior_scale": 30,  # only applies when model.use_prior is True
         "multisubject_ckpt": None,
+        # "use_grad_clip": True
     },
 }
 
 param_ranges = {
-    "batch_size": [21],
-    "use_siren_emb": [False],
+    "batch_size": [16],
+    # "nat_depth": [8],
+    # "n_blocks_decoder": [6],
+    # "use_grad_clip": [True]
+    # "use_siren_emb": [False],
     # "use_avg_pool": [True],
-    "mlp_clip_head": [True],
+    # "mlp_clip_head": [True],
     # "use_prior": [False],
     # "clip_seq_dim": [256],
     # "clip_emb_dim": [1280],
     
     # Variable Perceiver ablations
-    "n_blocks_decoder": [8],
-    "head_dim": [128],
-    "num_heads": [8],
-    "self_per_cross_attn": [2],
-    "variable_hidden_dims": ["'[128, 185, 266, 384, 554, 800, 1154, 1664]'"],
+    # "n_blocks_decoder": [8],
+    # "head_dim": [128],
+    # "num_heads": [8],
+    # "self_per_cross_attn": [2],
+    # "variable_hidden_dims": ["'[128, 185, 266, 384, 554, 800, 1154, 1664]'"],
     
     # Hierarchical Perceiver ablation parameters
     # "downsample_factors": ["'[2, 2, 2, 2]'"],

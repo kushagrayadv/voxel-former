@@ -198,13 +198,15 @@ default_params = {
         "blur_scale": 0.5,  # only applies when model.blurry_recon is True
         "prior_scale": 30,  # only applies when model.use_prior is True
         "multisubject_ckpt": None,
+        "use_grad_clip": True
     },
 }
 
 param_ranges = {
-    "batch_size": [32],
-    "nat_depth": [2],
-    "n_blocks_decoder": [2],
+    "batch_size": [12],
+    "nat_depth": [8],
+    "n_blocks_decoder": [22],
+    "use_grad_clip": [False]
     # "use_siren_emb": [False],
     # "use_avg_pool": [True],
     # "mlp_clip_head": [True],

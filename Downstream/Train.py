@@ -535,8 +535,9 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                     raise ValueError
                                 
                 accelerator.backward(loss)
-
-                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                if args.train.use_grad_clip:
+                    nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
                 optimizer.step()
 
@@ -788,6 +789,8 @@ def main(args: DictConfig) -> None:
         args.model.downsample_method = 'grid'
     if not hasattr(args.model, 'visualize_hierarchy'):
         args.model.visualize_hierarchy = False
+    if not hasattr(args.train, "use_grad_clip"):
+        args.train.use_grad_clip = False
     
     torch._dynamo.config.optimize_ddp=False
 
