@@ -8,10 +8,10 @@ defaults:
 
 
 # Logging
-wandb_log: true
+wandb_log: False
 wandb_project: "fmri_new"
 wandb_entity: "nyu_brain_decoding"
-model_name: "main_no_prior_linformer"
+model_name: "tomer_qformer_debug"
 
 instance_dir: "outputs/${model_name}/${now:%Y-%m-%d_%H-%M-%S}"
 hydra:

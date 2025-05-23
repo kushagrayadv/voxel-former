@@ -191,7 +191,7 @@ class BrainDecoder(nn.Module):
         #         nn.Conv2d(512, 512, 1, bias=True),
         #     )
 
-    def forward(self, x, coords):
+    def forward(self, x, coords=None):
         batch_size = x.shape[0]
         # Expand queries to batch size
         cross_attn_output = self.queries.repeat(batch_size, 1, 1)
@@ -240,7 +240,7 @@ class BrainTransformer(nn.Module):
         super(BrainTransformer, self).__init__()
         model_args = args.model
         from .tomer import Tomer
-        from .perceiver_decoder import HierarchicalPerceiverDecoder, PerceiverDecoder
+        from .perceiver_decoder import HierarchicalPerceiverDecoder, PerceiverDecoder, VariablePerceiverDecoder
         from .linformer import Linformer
 
         self.decoder_type = model_args.decoder_type
@@ -266,7 +266,10 @@ class BrainTransformer(nn.Module):
                 'self_per_cross_attn': model_args.self_per_cross_attn,
                 'input_dim': 1,  # Input dimension is 1 for brain signal
                 'coord_dim': 3,  # Add coordinate dimension
-                'omega_0': 30,   # Add omega_0 for SIREN
+                'omega_0': 30,   # Add omega_0 for SIREN,
+                'use_siren_embed': model_args.use_siren_emb,
+                'use_avg_pool': model_args.use_avg_pool,
+                'mlp_clip_head': model_args.mlp_clip_head
             }
             
             if perceiver_type == 'hierarchical':
@@ -277,6 +280,12 @@ class BrainTransformer(nn.Module):
                     downsample_factors=getattr(model_args, 'downsample_factors', [2, 2, 2, 2]),
                     use_residual=getattr(model_args, 'use_residual', True),
                     downsample_method=getattr(model_args, 'downsample_method', 'grid')
+                )
+            elif perceiver_type == 'variable':
+                del common_params['h']
+                self.brain_decoder = VariablePerceiverDecoder(
+                    **common_params,
+                    h_dims=getattr(model_args, "variable_hidden_dims", [128, 256, 512, 1024]),
                 )
             else:
                 # Use original perceiver without hierarchical processing

@@ -6,11 +6,11 @@ import hashlib
 
 def generate_sbatch_fmri(
     job_name="brainnat",
-    hour=48,
+    hour=2,
     minute=00,
     constraint="a100|h100",
     overlay_ext3=None,
-    output_dir_base="./jobs/",
+    output_dir_base="./inference-jobs/",
     script_name="Train.py",
     num_gpus=1,
     batch_size=4,
@@ -25,8 +25,8 @@ def generate_sbatch_fmri(
     if params is None or not overlay_ext3:
         raise ValueError("Params cannot be None")
 
-    if use_env_var and not env_file_path:
-        raise ValueError("env file path not present")
+    # if use_env_var and not env_file_path:
+    #     raise ValueError("env file path not present")
 
     # Add current date to job name
     current_date = datetime.now().strftime("%Y%m%d")
@@ -36,7 +36,7 @@ def generate_sbatch_fmri(
     text = "#!/bin/bash\n\n"
     text += f"#SBATCH --job-name={job_name}\n"
     text += "#SBATCH --nodes=1\n"
-    text += "#SBATCH --cpus-per-task=12\n"
+    text += "#SBATCH --cpus-per-task=8\n"
     text += "#SBATCH --mem=64GB\n"
     text += f"#SBATCH --time={hour}:{minute:02d}:00\n"
     text += f"#SBATCH --gres=gpu:{num_gpus}\n"
@@ -46,31 +46,16 @@ def generate_sbatch_fmri(
     text += "#SBATCH --error=./slurm-logs/%x-%j.err\n\n"
 
     text += f"overlay_ext3={overlay_ext3}\n"
-    text += f"export NUM_GPUS={num_gpus}  # Set to equal gres=gpu:#!\n"
-    text += f"export BATCH_SIZE={batch_size} # 21 for multisubject / 24 for singlesubject (orig. paper used 42 for multisubject / 24 for singlesubject)\n"
-    text += "export GLOBAL_BATCH_SIZE=$((BATCH_SIZE * NUM_GPUS))\n\n"
-
-    text += "# Make sure another job doesnt use same port, here using random number\n"
-    text += "export MASTER_PORT=$((RANDOM % (19000 - 11000 + 1) + 11000))\n"
-    text += 'export HOSTNAMES=$(scontrol show hostnames "$SLURM_JOB_NODELIST")\n'
-    text += 'export MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)\n'
-    text += (
-        'export COUNT_NODE=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | wc -l)\n'
-    )
-    text += "echo MASTER_ADDR=${MASTER_ADDR}\n"
-    text += "echo MASTER_PORT=${MASTER_PORT}\n"
-    text += "echo WORLD_SIZE=${COUNT_NODE}\n\n"
 
     text += "singularity exec --nv \\\n"
     text += "    --overlay ${overlay_ext3}:ro \\\n"
     text += f"    {singularity_path} \\\n"
     text += '    /bin/bash -c "\n'
     text += "source /ext3/env.sh\n"
-    # text += f"export $(grep -v '^#' {env_file_path} | xargs)\n" if use_env_var else ""
     text += f"cd {project_dir}\n\n"
 
     text += f"export SSL_CERT_FILE={ssl_cert_file_path}\n"
-    text += "accelerate launch --num_processes=${NUM_GPUS} --main_process_port=${MASTER_PORT} --mixed_precision=fp16 Train.py\\\n"
+    text += "python inference.py\\\n"
 
     for param_level in params.keys():
         for name, value in params[param_level].items():
@@ -90,7 +75,7 @@ def generate_sbatch_fmri(
     return text
 
 
-def generate_ablation_jobs(base_params, param_ranges, job_params):
+def generate_inference_jobs(base_params, param_ranges, job_params):
     jobs = []
 
     # Generate all combinations of parameter values
@@ -114,16 +99,24 @@ def generate_ablation_jobs(base_params, param_ranges, job_params):
         )
         params["base"]["model_name"] = model_name
 
-        job_name = f"{params['base']['wandb_project']}_{model_name}"
-
-        # Generate the job script
-        job_params["batch_size"] = params["train"]["batch_size"]
+        # Generate the job script for seen subjects
+        job_name = f"{params['base']['wandb_project']}_{model_name}_seen_inference"
+        params["data"]["multi_subject"] = "'[2, 3, 4, 5, 6, 7, 8]'"
         job_script = generate_sbatch_fmri(
             job_name=job_name,
             params=params,
             **job_params,
         )
+        jobs.append((job_name, job_script))
 
+        # Generate the job script for unseen subjects
+        job_name = f"{params['base']['wandb_project']}_{model_name}_unseen_inference"
+        params["data"]["multi_subject"] = "'[1]'"
+        job_script = generate_sbatch_fmri(
+            job_name=job_name,
+            params=params,
+            **job_params,
+        )
         jobs.append((job_name, job_script))
 
     return jobs
@@ -198,15 +191,15 @@ default_params = {
         "blur_scale": 0.5,  # only applies when model.blurry_recon is True
         "prior_scale": 30,  # only applies when model.use_prior is True
         "multisubject_ckpt": None,
-        "use_grad_clip": True
+        # "use_grad_clip": True
     },
 }
 
 param_ranges = {
-    "batch_size": [12],
-    "nat_depth": [8],
-    "n_blocks_decoder": [22],
-    "use_grad_clip": [False]
+    "batch_size": [16],
+    # "nat_depth": [8],
+    # "n_blocks_decoder": [6],
+    # "use_grad_clip": [True]
     # "use_siren_emb": [False],
     # "use_avg_pool": [True],
     # "mlp_clip_head": [True],
@@ -232,10 +225,10 @@ param_ranges = {
 }
 
 job_params = {
-    "hour": 48,
+    "hour": 1,
     "minute": 00,
     "constraint": "h100|a100",
-    "num_gpus": 2,
+    "num_gpus": 1,
     "batch_size": default_params["train"]["batch_size"],
     "overlay_ext3": "/scratch/ky2684/brain-decoding/fmri-img-reconstruct.ext3",
     "singularity_path": "/scratch/work/public/singularity/cuda12.6.2-cudnn9.5.0-devel-ubuntu24.04.1.sif",
@@ -244,4 +237,4 @@ job_params = {
 }
 
 if __name__ == "__main__":
-    jobs = generate_ablation_jobs(default_params, param_ranges, job_params)
+    jobs = generate_inference_jobs(default_params, param_ranges, job_params)

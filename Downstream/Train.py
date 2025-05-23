@@ -103,8 +103,8 @@ def build_model(args, device, data_type):
     clip_img_embedder = FrozenOpenCLIPImageEmbedder(
         arch="ViT-bigG-14",
         version="laion2b_s39b_b160k",
-        output_tokens=True,
-        only_tokens=True,
+        output_tokens=False if args.model.use_avg_pool else True,
+        only_tokens=False if args.model.use_avg_pool else True,
     ).to(device)
     logger.info("clip_img_embedder")
     utils.count_params(clip_img_embedder)
@@ -535,8 +535,9 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                     raise ValueError
                                 
                 accelerator.backward(loss)
-
-                nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                if args.train.use_grad_clip:
+                    nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
                 optimizer.step()
 
@@ -660,7 +661,8 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                         clip_voxels_norm,
                         clip_target_norm,
                         accelerator=accelerator,
-                        temp=.006)
+                        temp=.006,
+                        is_eval=True)
 
                     test_loss_clip_total += loss_clip.item()
                     loss_clip = loss_clip * clip_scale
@@ -742,9 +744,9 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
                 # Use end-of-epoch iteration instead of global_iteration
                 epoch_step = (epoch + 1) * num_iterations_per_epoch - 1
                 wandb.log(logs, step=epoch_step)
-                
+
         # Save model checkpoint and reconstruct
-        if (ckpt_saving) and (epoch % ckpt_interval == 0):
+        if (ckpt_saving) and (epoch % ckpt_interval == 0) and accelerator.is_main_process:
             save_ckpt(f'last',
                       args,
                       accelerator.unwrap_model(model),
@@ -762,9 +764,20 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
         accelerator.wait_for_everyone()
 
     logger.info("\n===Finished!===\n")
-    if ckpt_saving:
-        save_ckpt(f'last',args,accelerator.unwrap_model(model),optimizer,lr_scheduler,epoch, losses, test_losses, lrs, accelerator, ckpt_saving=True)
-
+    if ckpt_saving and accelerator.is_main_process:
+        save_ckpt(f'last',
+                    args,
+                    accelerator.unwrap_model(model),
+                    None if diffusion_prior is None else accelerator.unwrap_model(diffusion_prior),
+                    optimizer,
+                    lr_scheduler,
+                    epoch,
+                    losses,
+                    test_losses,
+                    lrs,
+                    accelerator,
+                    ckpt_saving=True)
+    
 @hydra.main(config_path="conf", config_name="config")
 def main(args: DictConfig) -> None:
     # Add default values for hierarchical perceiver parameters if not present
@@ -776,6 +789,8 @@ def main(args: DictConfig) -> None:
         args.model.downsample_method = 'grid'
     if not hasattr(args.model, 'visualize_hierarchy'):
         args.model.visualize_hierarchy = False
+    if not hasattr(args.train, "use_grad_clip"):
+        args.train.use_grad_clip = False
     
     torch._dynamo.config.optimize_ddp=False
 
@@ -840,6 +855,9 @@ def main(args: DictConfig) -> None:
     if args.wandb_log and accelerator.is_main_process:
         wandb.log(param_count_dict)
     optimizer, lr_scheduler = setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch)
+
+    # utils.attach_hooks_for_nan(model.brain_decoder)
+    # utils.attach_hooks_for_nan(diffusion_prior.net)
 
     # Load checkpoint if exists
     epoch_start, losses, test_losses, lrs, resumed = utils.load_ckpt(

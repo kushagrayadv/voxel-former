@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 jobs/
+inference-jobs/
 __pycache__/
 *.py[cod]
 wandb/
