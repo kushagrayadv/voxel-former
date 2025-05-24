@@ -138,18 +138,11 @@ default_params = {
         "new_test": True,
     },
     "model": {
-        "encoder_type": "tomer",
-        "decoder_type": "qformer",  # Options: 'qformer', 'perceiver'
-        "perceiver_type": "variable",  # Options: 'original', 'hierarchical', 'variable',
         "n_blocks": 4,
         "decoder_hidden_dim": 1280,
         "encoder_hidden_dim": 256,
-        "encoder_seq_len": 2048,  # New parameter for linformer
-        "share_kv": False,  # New parameter for linformer
         "use_mixer": False,
         "num_heads": 8,
-        "head_dim": 64,  # New parameter for Perceiver
-        "self_per_cross_attn": 1,  # New parameter for Perceiver
         "tome_r": 1000,
         "last_n_features": 16,
         "nat_depth": 8,
@@ -162,16 +155,6 @@ default_params = {
         "dim_scale_factor": 0,
         "clip_seq_dim": 256,
         "clip_emb_dim": 1664,
-        "use_siren_emb": False,  # Learnable position embeddings for Perceiver
-        "use_avg_pool": False,
-        "mlp_clip_head": False,
-        # Hierarchical Perceiver specific parameters
-        "downsample_factors": "'[2, 2, 2, 2]'",  # Downsampling factors for each level
-        "use_residual": True,  # Whether to use U-Net style residual connections
-        "downsample_method": "grid",  # 'grid' or 'knn'
-        "visualize_hierarchy": True,  # Whether to visualize the hierarchy
-        # Variable Perceiver params
-        "variable_hidden_dims": "'[128, 256, 512, 768, 1024, 1280]'",
     },
     "train": {
         "use_prior": True,
