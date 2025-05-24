@@ -103,8 +103,8 @@ def build_model(args, device, data_type):
     clip_img_embedder = FrozenOpenCLIPImageEmbedder(
         arch="ViT-bigG-14",
         version="laion2b_s39b_b160k",
-        output_tokens=False if args.model.use_avg_pool else True,
-        only_tokens=False if args.model.use_avg_pool else True,
+        output_tokens=True,
+        only_tokens=True,
     ).to(device)
     logger.info("clip_img_embedder")
     utils.count_params(clip_img_embedder)
@@ -195,14 +195,6 @@ def build_model(args, device, data_type):
         Brain_Decoder_param = None
     param_count_dict = {"Model_param": Model_param, "Brain_Encoder_param": Brain_Encoder_param, "Brain_Decoder_param": Brain_Decoder_param}
     
-    # Visualize hierarchical structure if using perceiver decoder
-    if model.decoder_type == "perceiver" and args.wandb_log and args.model.visualize_hierarchy:
-        # Create a dummy batch for visualization
-        dummy_coords = torch.randn(1, 10000, 3, device=device)  # Adjust size based on your data
-        hierarchy_viz = visualize_hierarchy(model, dummy_coords, device, wandb_log=True)
-        if hierarchy_viz is not None:
-            param_count_dict["hierarchy_visualization"] = hierarchy_viz
-    
     return (
         clip_img_embedder,
         model,
@@ -222,40 +214,31 @@ def setup_optimizer(args, model, diffusion_prior, num_iterations_per_epoch):
     # Initialize parameter groups list
     opt_grouped_parameters = []
 
-    # Group parameters based on decoder type
-    if model.decoder_type == 'perceiver':
-        # For Perceiver, only optimize decoder parameters
-        opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.brain_decoder.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.brain_decoder.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-        ])
-    else:  # 'qformer'
-        # For Q-former, optimize both encoder and decoder
-        # Encoder parameters
-        opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.brain_encoder.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.brain_encoder.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-        ])
+    # For Q-former, optimize both encoder and decoder
+    # Encoder parameters
+    opt_grouped_parameters.extend([
+        {'params': [p for n, p in model.brain_encoder.named_parameters() if not any(nd in n for nd in no_decay)],
+            'weight_decay': 1e-2},
+        {'params': [p for n, p in model.brain_encoder.named_parameters() if any(nd in n for nd in no_decay)],
+            'weight_decay': 0.0},
+    ])
+    
+    # Feature mapper parameters
+    opt_grouped_parameters.extend([
+        {'params': [p for n, p in model.feature_mapper.named_parameters() if not any(nd in n for nd in no_decay)],
+            'weight_decay': 1e-2},
+        {'params': [p for n, p in model.feature_mapper.named_parameters() if any(nd in n for nd in no_decay)],
+            'weight_decay': 0.0},
+    ])
+    
+    # Decoder parameters
+    opt_grouped_parameters.extend([
+        {'params': [p for n, p in model.brain_decoder.named_parameters() if not any(nd in n for nd in no_decay)],
+            'weight_decay': 1e-2},
+        {'params': [p for n, p in model.brain_decoder.named_parameters() if any(nd in n for nd in no_decay)],
+            'weight_decay': 0.0},
+    ])
         
-        # Feature mapper parameters
-        opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.feature_mapper.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.feature_mapper.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-        ])
-        
-        # Decoder parameters
-        opt_grouped_parameters.extend([
-            {'params': [p for n, p in model.brain_decoder.named_parameters() if not any(nd in n for nd in no_decay)],
-             'weight_decay': 1e-2},
-            {'params': [p for n, p in model.brain_decoder.named_parameters() if any(nd in n for nd in no_decay)],
-             'weight_decay': 0.0},
-        ])
 
     # Add prior network parameters if enabled
     if args.train.use_prior and diffusion_prior is not None:
@@ -348,27 +331,6 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
         range(epoch_start, num_epochs), 
         disable=not accelerator.is_local_main_process
     )
-    
-    # Create visualizations for hierarchical perceiver if needed
-    if (wandb_log and accelerator.is_main_process):
-        # Unwrap the model to access its attributes
-        unwrapped_model = accelerator.unwrap_model(model)
-        
-        if (unwrapped_model.decoder_type == "perceiver" and 
-            getattr(args.model, 'visualize_hierarchy', False)):
-            
-            # Get first batch for visualization
-            for images, voxels, subj_idx, coords, image_idx in train_dl:
-                coords = coords.to(device)
-                hierarchy_viz = visualize_hierarchy(
-                    unwrapped_model,  # Use unwrapped model here
-                    coords, 
-                    device, 
-                    wandb_log=True
-                )
-                if hierarchy_viz is not None:
-                    wandb.log({"hierarchy_visualization": hierarchy_viz})
-                break
     
     global_iteration = epoch_start * num_iterations_per_epoch
     for epoch in epoch_progress:
@@ -780,18 +742,6 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
     
 @hydra.main(config_path="conf", config_name="config")
 def main(args: DictConfig) -> None:
-    # Add default values for hierarchical perceiver parameters if not present
-    if not hasattr(args.model, 'downsample_factors'):
-        args.model.downsample_factors = [2, 2, 2, 2]
-    if not hasattr(args.model, 'use_residual'):
-        args.model.use_residual = True
-    if not hasattr(args.model, 'downsample_method'):
-        args.model.downsample_method = 'grid'
-    if not hasattr(args.model, 'visualize_hierarchy'):
-        args.model.visualize_hierarchy = False
-    if not hasattr(args.train, "use_grad_clip"):
-        args.train.use_grad_clip = False
-    
     torch._dynamo.config.optimize_ddp=False
 
     # Initialize accelerator first
