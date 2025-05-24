@@ -240,130 +240,47 @@ class BrainTransformer(nn.Module):
         super(BrainTransformer, self).__init__()
         model_args = args.model
         from .tomer import Tomer
-        from .perceiver_decoder import HierarchicalPerceiverDecoder, PerceiverDecoder, VariablePerceiverDecoder
-        from .linformer import Linformer
 
-        self.decoder_type = model_args.decoder_type
-        self.encoder_type = model_args.encoder_type
+        self.brain_encoder = Tomer(
+            in_chans=1,
+            embed_dim=model_args.encoder_hidden_dim,
+            depth=model_args.nat_depth,
+            num_heads=model_args.num_heads,
+            num_neighbors=model_args.nat_num_neighbors,
+            tome_r=model_args.tome_r,
+            layer_scale_init_value=1e-6,
+            coord_dim=3,
+            omega_0=30,
+            last_n_features=model_args.last_n_features,
+            full_attention=model_args.full_attention,
+            drop_rate=model_args.drop,
+            progressive_dims=model_args.progressive_dims,
+            initial_tokens=model_args.initial_tokens,
+            dim_scale_factor=model_args.dim_scale_factor,
+        )
 
-        self.brain_encoder = None
-        self.brain_decoder = None
+        # Linear layer to map encoder output to decoder input
+        self.feature_mapper = nn.Linear(
+            self.brain_encoder.blocks.final_dim, model_args.decoder_hidden_dim
+        )
 
-        if self.decoder_type == "perceiver":
-            # For Perceiver, we don't need the encoder
-            perceiver_type = getattr(model_args, 'perceiver_type', 'original')
-            
-            # Common parameters for both perceiver types
-            common_params = {
-                'h': model_args.decoder_hidden_dim,
-                'out_dim': model_args.clip_emb_dim,
-                'num_latents': model_args.clip_seq_dim,
-                'n_blocks': model_args.n_blocks_decoder,
-                'num_heads': model_args.num_heads,
-                'head_dim': model_args.head_dim,
-                'drop': model_args.drop,
-                'clip_scale': args.train.clip_scale,
-                'self_per_cross_attn': model_args.self_per_cross_attn,
-                'input_dim': 1,  # Input dimension is 1 for brain signal
-                'coord_dim': 3,  # Add coordinate dimension
-                'omega_0': 30,   # Add omega_0 for SIREN,
-                'use_siren_embed': model_args.use_siren_emb,
-                'use_avg_pool': model_args.use_avg_pool,
-                'mlp_clip_head': model_args.mlp_clip_head
-            }
-            
-            if perceiver_type == 'hierarchical':
-                # Use hierarchical perceiver with downsampling and residuals
-                self.brain_decoder = HierarchicalPerceiverDecoder(
-                    **common_params,
-                    # Hierarchical-specific parameters
-                    downsample_factors=getattr(model_args, 'downsample_factors', [2, 2, 2, 2]),
-                    use_residual=getattr(model_args, 'use_residual', True),
-                    downsample_method=getattr(model_args, 'downsample_method', 'grid')
-                )
-            elif perceiver_type == 'variable':
-                del common_params['h']
-                self.brain_decoder = VariablePerceiverDecoder(
-                    **common_params,
-                    h_dims=getattr(model_args, "variable_hidden_dims", [128, 256, 512, 1024]),
-                )
-            else:
-                # Use original perceiver without hierarchical processing
-                self.brain_decoder = PerceiverDecoder(
-                    **common_params
-                )
-        else:  # 'qformer'
-            # Use encoder + Q-former decoder
-            if self.encoder_type == "linformer":
-                self.brain_encoder = Linformer(
-                    dim=model_args.encoder_hidden_dim,
-                    seq_len=model_args.encoder_seq_len,
-                    depth=model_args.nat_depth,
-                    k=model_args.encoder_hidden_dim,
-                    heads=model_args.num_heads,
-                    dim_head=model_args.head_dim,
-                    one_kv_head=False,
-                    share_kv=model_args.share_kv,
-                    dropout=model_args.drop,
-                    tome_r=model_args.tome_r,  # Add token merging parameter
-                    coord_dim=3,  # Add coordinate dimension
-                    omega_0=30    # Add omega_0 for SIREN
-                )
-
-                self.feature_mapper = nn.Linear(
-                    model_args.encoder_hidden_dim, model_args.decoder_hidden_dim
-                )
-
-            else:
-                self.brain_encoder = Tomer(
-                    in_chans=1,
-                    embed_dim=model_args.encoder_hidden_dim,
-                    depth=model_args.nat_depth,
-                    num_heads=model_args.num_heads,
-                    num_neighbors=model_args.nat_num_neighbors,
-                    tome_r=model_args.tome_r,
-                    layer_scale_init_value=1e-6,
-                    coord_dim=3,
-                    omega_0=30,
-                    last_n_features=model_args.last_n_features,
-                    full_attention=model_args.full_attention,
-                    drop_rate=model_args.drop,
-                    progressive_dims=model_args.progressive_dims,
-                    initial_tokens=model_args.initial_tokens,
-                    dim_scale_factor=model_args.dim_scale_factor,
-                )
-
-                # Linear layer to map encoder output to decoder input
-                self.feature_mapper = nn.Linear(
-                    self.brain_encoder.blocks.final_dim, model_args.decoder_hidden_dim
-                )
-
-            self.brain_decoder = BrainDecoder(
-                h=model_args.decoder_hidden_dim,
-                out_dim=model_args.clip_emb_dim,
-                seq_len=model_args.clip_seq_dim,
-                n_blocks=model_args.n_blocks_decoder,
-                num_heads=model_args.num_heads,
-                drop=model_args.drop,
-                blurry_recon=args.train.blurry_recon,
-                clip_scale=args.train.clip_scale,
-            )
+        self.brain_decoder = BrainDecoder(
+            h=model_args.decoder_hidden_dim,
+            out_dim=model_args.clip_emb_dim,
+            seq_len=model_args.clip_seq_dim,
+            n_blocks=model_args.n_blocks_decoder,
+            num_heads=model_args.num_heads,
+            drop=model_args.drop,
+            blurry_recon=args.train.blurry_recon,
+            clip_scale=args.train.clip_scale,
+        )
 
     def forward(self, x, coords):
-        if self.decoder_type == "perceiver":
-            # For Perceiver, directly process the brain signal with coordinates
-            x = x.squeeze(1)  # Remove channel dimension if present
-            backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x, coords)
-        else:
-            # For Q-former, use encoder + decoder
-            if self.encoder_type == 'linformer':
-                x = x.squeeze(1)
-                x = self.brain_encoder(x, coords)  # Pass coordinates to Linformer
-            else:
-                x = self.brain_encoder(x, coords)  # Pass coordinates to Tomer
+        x = self.brain_encoder(x, coords)  # Pass coordinates to Tomer
 
-            x = self.feature_mapper(x)
-            backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
+        x = self.feature_mapper(x)
+
+        backbone, clip_voxels, blurry_image_enc = self.brain_decoder(x)
 
         # Add shape assertions for debugging
         batch_size = x.shape[0]
@@ -380,8 +297,9 @@ class BrainTransformer(nn.Module):
 def visualize_hierarchy(model, coords, device, wandb_log=False):
     """Visualize the hierarchical downsampling of brain coordinates"""
     # Check if this is a hierarchical perceiver model by looking for the downsample_layers attribute
-    if (not hasattr(model, 'brain_decoder') or 
-        not hasattr(model.brain_decoder, 'downsample_layers')):
+    if not hasattr(model, "brain_decoder") or not hasattr(
+        model.brain_decoder, "downsample_layers"
+    ):
         return None
-    
+
     # Rest of function remains the same...
