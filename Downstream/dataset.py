@@ -4,6 +4,8 @@ import numpy as np
 import random
 import h5py
 import re
+import os
+from glob import glob
 import webdataset as wds
 from torch.utils.data import Dataset, DataLoader, Sampler
 from collections import defaultdict
@@ -11,8 +13,11 @@ from collections import defaultdict
 from IPython import embed
 
 class MindEye2Dataset(Dataset):
-    def __init__(self, args, data_type, split='train'):
+    def __init__(self, args, data_type, split='train', is_mni_data=False):
         self.data_type = data_type
+        self.is_mni_data = is_mni_data
+        self.mni_data_path = args.mni_data_path
+        self.reg_volumes = load_mni_data(args, subj_list, data_type) if is_mni_data else None
         self.dataset, subj_list = load_web_dataset(args, split)
         self.voxels, self.num_voxels = load_voxels(args, subj_list, data_type)
         self.images = load_images(args)
@@ -32,9 +37,28 @@ class MindEye2Dataset(Dataset):
         image_id = int(behav0[0,0])
         voxel_id = int(behav0[0,5])
         subj_id = int(subj_id)
-        coord = self.coords[f'subj0{subj_id}'] 
+        coord = self.coords[f'subj0{subj_id}']
+        subj_key = f'subj0{subj_id}'
+        
+        image = torch.tensor(self.images[image_id],dtype=self.data_type)
+        voxel = None
+        
+        # Check if the data is MNI conditioned data
+        if self.is_mni_data:
+            reg_data = self.reg_volumes.get((subj_key, voxel_id), None)
+            
+            if reg_data is not None:
+                mask = reg_data != 0
+                coord = torch.nonzero(mask, as_tuple=False).float()
+                voxel = reg_data[mask][voxel_id].view(1, -1)
+            else:
+                voxel = self.voxels[subj_key][voxel_id].view(1,-1)
+        else:
+            voxel = self.voxels[subj_key][voxel_id].view(1,-1)
+
+
         # Print device information for debugging
-        return torch.tensor(self.images[image_id],dtype=self.data_type), self.voxels[f'subj0{subj_id}'][voxel_id].view(1,-1), subj_id, coord, image_id
+        return image, voxel, subj_id, coord, image_id
 
 class SubjectBatchSampler(Sampler):
     def __init__(self, dataset, batch_size, shuffle=True):
@@ -137,6 +161,23 @@ def load_images(args):
     f = h5py.File(f'{args.data_path}/coco_images_224_float16.hdf5', 'r')
     images = f['images']
     return images
+
+def load_mni_data(args, subj_list, data_type):
+    reg_volumes = {}
+    for subj in subj_list:
+        subj_key = f'subj0{subj}'
+        search_globs = os.path.join(args.mni_data_path, subj_key, 'batch*', f'condition_*_MNI.nii.gz')
+        matches = glob(search_globs)
+        for fpath in matches:
+            fname = os.path.basename(fpath)
+            match = re.match(r'condition_(\d+)_MNI.nii.gz', fname)
+            if match:
+                voxel_id = int(match.group(1)) - 1
+                nii_data = nib.load(fpath).get_fdata().astype(np.float32)
+                data = torch.from_numpy(nii_data).to(data_type)
+                reg_volumes[(subj_key, voxel_id)] = data
+
+    return reg_volumes
 
 def custom_collate_fn(batch):
     images, voxels, subjects, coords, image_idx = zip(*batch)

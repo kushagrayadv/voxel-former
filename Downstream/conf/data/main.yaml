@@ -5,6 +5,7 @@
 # Paths
 data_path: "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
 cache_dir: "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
+mni_data_path: "/scratch/ne2213/projects/Brain_Decoding/nsdcode/conditioned_MNI_nsdcode"
 
 # Subject and session info
 subj: 2
