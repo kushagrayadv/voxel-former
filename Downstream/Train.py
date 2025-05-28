@@ -88,11 +88,11 @@ def visualize_hierarchy(model, coords, device, wandb_log=False):
         return fig
 
 def prepare_data(args, data_type):
-    train_data = MindEye2Dataset(args.data, data_type, 'train')
+    train_data = MindEye2Dataset(args.data, data_type, 'train', is_mni_data=True)
     train_sampler = SubjectBatchSampler(train_data, args.train.batch_size)
     train_dl = torch.utils.data.DataLoader(train_data, batch_sampler=train_sampler, collate_fn=custom_collate_fn, num_workers=16, pin_memory=True, persistent_workers=True)
 
-    test_data = MindEye2Dataset(args.data, data_type, 'test')
+    test_data = MindEye2Dataset(args.data, data_type, 'test', is_mni_data=True)
     test_sampler = SubjectBatchSampler(test_data, args.train.batch_size, shuffle=True)
     test_dl = torch.utils.data.DataLoader(test_data, batch_sampler=test_sampler, collate_fn=custom_collate_fn, num_workers=16, pin_memory=True, persistent_workers=True)
 
@@ -799,7 +799,11 @@ def main(args: DictConfig) -> None:
 
     # Data preparation
     train_dl, test_dl, num_test, num_iterations_per_epoch = prepare_data(args, data_type)
+    
+    images, voxels, subjects, coords, image_idx = next(iter(train_dl))
+    print(images.shape, voxels.shape, subjects.shape, coords.shape, image_idx.shape)
 
+    return
     # Model initialization
     clip_img_embedder, model, diffusion_prior, autoenc, cnx, mean, std, blur_augs, param_count_dict = build_model(args, device, data_type)
     if args.wandb_log and accelerator.is_main_process:
