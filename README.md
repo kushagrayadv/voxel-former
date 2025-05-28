@@ -82,7 +82,7 @@ python Downstream/Train.py \
 
 ```bash
 # Run image retrieval inference
-python Downstream/recon_inference.py
+python Downstream/inference.py
 ```
 
 ### SLURM Job Generation
@@ -167,7 +167,7 @@ If you use VoxelFormer in your research, please cite our paper:
 ```bibtex
 @article{le2024voxelformer,
   title={VoxelFormer: Parameter-Efficient Multi-Subject Visual Decoding from fMRI},
-  author={Le, Chenqian and Zhao, Yilin and Emami, Nikasadat and Yadav, Kushagra and Liu, Xujin Chris and Chen, Xupeng and Wang, Yao},
+  author={Le, Chenqian and Zhao, Yilin and Emami, Nika and Yadav, Kushagra and Liu, Xujin Chris and Chen, Xupeng and Wang, Yao},
   journal={IEEE Conference Proceedings},
   year={2024},
   organization={New York University Tandon School of Engineering}
