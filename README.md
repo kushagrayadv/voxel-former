@@ -37,27 +37,6 @@ pip install -r requirements.txt
 pip install git+https://github.com/openai/CLIP.git --no-deps
 ```
 
-## Architecture Overview
-
-VoxelFormer consists of two main components working in sequence:
-
-### 1. ToMer (Token Merging Transformer) Encoder
-- **Tokenization**: Uses 1×1 convolutional layer to tokenize input voxel data
-- **Positional Encoding**: SIREN-based positional embeddings from 3D voxel coordinates
-- **Self-Attention**: Captures relationships among voxel tokens
-- **Token Merging**: Dynamically merges highly correlated tokens during training and inference
-- **Progressive Compression**: Multiple ToMer blocks progressively reduce token count
-
-### 2. Q-Former (Query-Former) 
-- **Fixed-size Output**: Produces consistent representations regardless of input voxel count
-- **Cross-Attention**: Learnable query tokens attend to compressed ToMer features
-- **Multi-Subject Training**: Enables training across subjects without subject-specific layers
-- **CLIP Alignment**: Aligns brain representations with CLIP image embedding space
-
-### 3. Dual-Pathway Decoding
-- **Prior Transformer**: MSE loss alignment with CLIP embeddings for potential image generation
-- **MLP Projector**: Contrastive learning for robust image retrieval via nearest-neighbor search
-
 ## Usage
 
 *Note* - The configuration for the dataset paths, model parameters and training parameters are under the ``Downtstream/conf`` directory with respective sub-directories. 
@@ -147,18 +126,6 @@ singularity exec --nv \
     /scratch/containers/pytorch_22.08.sif \
     /bin/bash -c "source /ext3/env.sh && python Downstream/Train.py [args]"
 ```
-
-## Evaluation Metrics
-
-VoxelFormer uses standard brain decoding evaluation metrics:
-
-- **Top-1 Retrieval Accuracy**: Percentage of correctly retrieved images from 300-image pool
-- **Forward Retrieval**: Using brain embeddings to find matching images  
-- **Backward Retrieval**: Using image embeddings to find matching brain responses
-- **Cosine Similarity**: Alignment between brain-derived and CLIP embeddings
-- **Parameter Count**: Total trainable parameters for efficiency comparison
-
-**Chance Level**: 0.33% (1/300 images)
 
 ## Citation
 
