@@ -39,13 +39,13 @@ pip install git+https://github.com/openai/CLIP.git --no-deps
 
 ## Usage
 
-*Note* - The configuration for the dataset paths, model parameters and training parameters are under the ``Downtstream/conf`` directory with respective sub-directories. 
+*Note* - The configuration for the dataset paths, model parameters and training parameters are under the ``src/conf`` directory with respective sub-directories. 
 
 ### Training
 
 ```bash
 # Multi-subject training on NSD subjects 2-7
-python Downstream/Train.py \
+python src/Train.py \
     --model.encoder_hidden_dim=1024 \
     --model.decoder_hidden_dim=4096 \
     --model.nat_depth=4 \
@@ -61,18 +61,11 @@ python Downstream/Train.py \
 
 ```bash
 # Run image retrieval inference
-python Downstream/inference.py
+python src/inference.py
 ```
 
-### SLURM Job Generation
-
-```bash
-# Generate training jobs for HPC
-python slurm_job_generator.py
-
-# Generate inference jobs
-python slurm_inference_job_generator.py
-```
+### SLURM Jobs
+The files `voxel-former-slurm-train.sbatch` and `voxel-former-slurm-inference.sbatch` provide example SLURM job scripts for training and running inference with the model in HPC environments.
 
 ## Dataset
 
@@ -113,10 +106,6 @@ data/
 ```bash
 # Interactive A100 session
 srun -t 4:00:00 --mem=64000 --gres=gpu:a100:1 --pty /bin/bash
-
-# Load modules
-module purge
-module load cuda/11.6 cudnn/8.4.0
 ```
 
 ### Singularity Container
@@ -124,7 +113,7 @@ module load cuda/11.6 cudnn/8.4.0
 singularity exec --nv \
     --overlay /scratch/overlay.ext3:ro \
     /scratch/containers/pytorch_22.08.sif \
-    /bin/bash -c "source /ext3/env.sh && python Downstream/Train.py [args]"
+    /bin/bash -c "source /ext3/env.sh && python src/Train.py [args]"
 ```
 
 ## Acknowledgments
