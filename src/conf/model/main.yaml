@@ -14,6 +14,8 @@ nat_depth: 8
 nat_num_neighbors: 8
 full_attention: true
 n_blocks_decoder: 10
+use_token_merging: true
+use_qformer: true
 
 # Dropout and progressive-dim scaling
 drop: 0.1
