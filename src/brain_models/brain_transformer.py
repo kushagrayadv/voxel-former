@@ -234,6 +234,53 @@ class BrainDecoder(nn.Module):
         return backbone, c, b
 
 
+
+
+
+# Simple Pooling + MLP replacement for QFormer
+class SimplePoolingMLP(nn.Module):
+    def __init__(self, input_dim, output_dim, seq_len, hidden_dim, dropout=0.1, kernel_size=32):
+        super().__init__()
+        self.seq_len = seq_len
+        self.input_dim = input_dim
+        
+        # Local matching with configurable kernel size
+        self.kernel_size = min(kernel_size, seq_len // 4)  # Ensure kernel size doesn't exceed sequence
+        self.pooling = nn.AvgPool1d(kernel_size=self.kernel_size, stride=self.kernel_size//2, padding=self.kernel_size//4)
+        self.mlp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim)
+        )
+        
+        # For compatibility with BrainDecoder interface
+        self.backbone_proj = nn.Linear(output_dim, output_dim)
+        self.clip_proj = nn.Linear(output_dim, output_dim)
+    
+    def forward(self, x, coords=None):
+        batch_size = x.shape[0]
+        
+        # Local matching across sequence dimension
+        # x shape: (batch_size, seq_len, input_dim)
+        x_pooled = self.pooling(x.transpose(1, 2)).transpose(1, 2)  # (batch_size, new_seq_len, input_dim)
+        
+        # Apply MLP to each local region
+        features = self.mlp(x_pooled)  # (batch_size, new_seq_len, output_dim)
+        
+        # Apply projections to match expected output format
+        backbone = self.backbone_proj(features)  # (batch_size, new_seq_len, output_dim)
+        clip_voxels = self.clip_proj(features)   # (batch_size, new_seq_len, output_dim)
+        
+        # Initialize blurry reconstruction (placeholder)
+        blurry_image_enc = torch.zeros((batch_size, 2, 1), device=x.device)
+        
+        return backbone, clip_voxels, blurry_image_enc
+
+
 # Transformer
 class BrainTransformer(nn.Module):
     def __init__(self, args):
@@ -272,16 +319,28 @@ class BrainTransformer(nn.Module):
             self.brain_encoder = None
             self.feature_mapper = nn.Linear(1, model_args.decoder_hidden_dim)  # Direct mapping from input to decoder
 
-        self.brain_decoder = BrainDecoder(
-            h=model_args.decoder_hidden_dim,
-            out_dim=model_args.clip_emb_dim,
-            seq_len=model_args.clip_seq_dim,
-            n_blocks=model_args.n_blocks_decoder,
-            num_heads=model_args.num_heads,
-            drop=model_args.drop,
-            blurry_recon=args.train.blurry_recon,
-            clip_scale=args.train.clip_scale,
-        )
+        # Conditionally create brain_decoder based on use_qformer config
+        if model_args.use_qformer:
+            self.brain_decoder = BrainDecoder(
+                h=model_args.decoder_hidden_dim,
+                out_dim=model_args.clip_emb_dim,
+                seq_len=model_args.clip_seq_dim,
+                n_blocks=model_args.n_blocks_decoder,
+                num_heads=model_args.num_heads,
+                drop=model_args.drop,
+                blurry_recon=args.train.blurry_recon,
+                clip_scale=args.train.clip_scale,
+            )
+        else:
+            # Simple pooling + MLP replacement for QFormer
+            self.brain_decoder = SimplePoolingMLP(
+                input_dim=model_args.decoder_hidden_dim,
+                output_dim=model_args.clip_emb_dim,
+                seq_len=model_args.clip_seq_dim,
+                hidden_dim=model_args.decoder_hidden_dim // 2,
+                dropout=model_args.drop,
+                kernel_size=model_args.pooling_kernel_size
+            )
 
     def forward(self, x, coords):
         if self.brain_encoder is not None:
