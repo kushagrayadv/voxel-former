@@ -16,7 +16,7 @@ full_attention: true
 n_blocks_decoder: 10
 use_token_merging: true
 use_qformer: true
-pooling_kernel_size: 32
+use_adaptive_pooling: true
 
 # Dropout and progressive-dim scaling
 drop: 0.1
