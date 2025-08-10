@@ -315,36 +315,35 @@ class BrainTransformer(nn.Module):
     def __init__(self, args):
         super(BrainTransformer, self).__init__()
         model_args = args.model
-    
-        if model_args.use_token_merging:
-            from .tomer import Tomer
-            
-            self.brain_encoder = Tomer(
-                in_chans=1,
-                embed_dim=model_args.encoder_hidden_dim,
-                depth=model_args.nat_depth,
-                num_heads=model_args.num_heads,
-                num_neighbors=model_args.nat_num_neighbors,
-                tome_r=model_args.tome_r,
-                layer_scale_init_value=1e-6,
-                coord_dim=3,
-                omega_0=30,
-                last_n_features=model_args.last_n_features,
-                full_attention=model_args.full_attention,
-                drop_rate=model_args.drop,
-                progressive_dims=model_args.progressive_dims,
-                initial_tokens=model_args.initial_tokens,
-                dim_scale_factor=model_args.dim_scale_factor,
-            )
+        from .tomer import Tomer
 
-            # Linear layer to map encoder output to decoder input
-            self.feature_mapper = nn.Linear(
-                self.brain_encoder.blocks.final_dim, model_args.decoder_hidden_dim
-            )
+        if model_args.use_token_merging:
+            tomer = model_args.tome_r
         else:
-            # No brain_encoder - create a simple projection from input to decoder
-            self.brain_encoder = None
-            self.feature_mapper = nn.Linear(1, model_args.decoder_hidden_dim)  # Direct mapping from input to decoder
+            tomer = 0
+            
+        self.brain_encoder = Tomer(
+            in_chans=1,
+            embed_dim=model_args.encoder_hidden_dim,
+            depth=model_args.nat_depth,
+            num_heads=model_args.num_heads,
+            num_neighbors=model_args.nat_num_neighbors,
+            tome_r=tomer,
+            layer_scale_init_value=1e-6,
+            coord_dim=3,
+            omega_0=30,
+            last_n_features=model_args.last_n_features,
+            full_attention=model_args.full_attention,
+            drop_rate=model_args.drop,
+            progressive_dims=model_args.progressive_dims,
+            initial_tokens=model_args.initial_tokens,
+            dim_scale_factor=model_args.dim_scale_factor,
+        )
+
+        # Linear layer to map encoder output to decoder input
+        self.feature_mapper = nn.Linear(
+            self.brain_encoder.blocks.final_dim, model_args.decoder_hidden_dim
+        )           
 
         # Conditionally create brain_decoder based on use_qformer config
         if model_args.use_qformer:
@@ -381,10 +380,7 @@ class BrainTransformer(nn.Module):
                 )
 
     def forward(self, x, coords):
-        if self.brain_encoder is not None:
-            x = self.brain_encoder(x, coords)  # Pass coordinates to Tomer
-        else:
-            x = x.unsqueeze(-1) # Convert from (batch, seq) to (batch, seq, 1)
+        x = self.brain_encoder(x, coords)  # Pass coordinates to Tomer
 
         x = self.feature_mapper(x)
 
