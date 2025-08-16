@@ -10,13 +10,13 @@ use_mixer: false
 num_heads: 8
 tome_r: 1000
 last_n_features: 16
-nat_depth: 8
+nat_depth: 2
 nat_num_neighbors: 8
 full_attention: true
 n_blocks_decoder: 10
 use_token_merging: true
-use_qformer: true
-use_adaptive_pooling: true
+use_qformer: false
+use_adaptive_pooling: false
 
 # Dropout and progressive-dim scaling
 drop: 0.1

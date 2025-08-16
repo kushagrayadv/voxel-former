@@ -237,7 +237,7 @@ class BrainDecoder(nn.Module):
 class AdaptivePoolingTransformer(nn.Module):
     def __init__(self, input_dim, output_dim, seq_len, hidden_dim, num_heads, num_layers, dropout=0.1):
         super().__init__()
-        self.pooling = nn.AdaptiveAvgPool1d(seq_len)  # Adaptive pooling to reduce sequence length
+        self.pooling = nn.AdaptiveMaxPool1d(seq_len)  # Adaptive pooling to reduce sequence length
 
         # Transformer layers
         encoder_layer = nn.TransformerEncoderLayer(
@@ -277,22 +277,57 @@ class AdaptivePoolingTransformer(nn.Module):
 
 # Simple Pooling + MLP replacement for QFormer
 class SimplePoolingMLP(nn.Module):
-    def __init__(self, input_dim, output_dim, seq_len, hidden_dim, dropout=0.1):
+    def __init__(self, input_dim, output_dim, seq_len, dropout=0.1):
         super().__init__()
         
-        self.pooling = nn.AdaptiveAvgPool1d(seq_len)  # Pool to target sequence length
-        self.mlp = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, output_dim)
-        )
+        # To achieve ~30M parameters, we need much larger hidden dimensions
+        # Current: input_dim=1280, output_dim=1664, seq_len=256
+        # Target: ~30M parameters
         
+        # Let's use a deeper network with larger hidden dimensions
+        # [2560, 2304, 2048, 1792, 1536, 1280, 1024, 896, 768]
+        hidden_dims = [2560, 2304, 2048, 1792, 1536, 1280, 1024, 896, 768]
+        
+        self.pooling = nn.AdaptiveMaxPool1d(seq_len)  # Pool to target sequence length
+        
+        # Build deeper network with larger dimensions
+        layers = []
+        current_dim = input_dim
+        
+        for hidden_dim in hidden_dims:
+            layers.extend([
+                nn.Linear(current_dim, hidden_dim),
+                nn.LayerNorm(hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout)
+            ])
+            current_dim = hidden_dim
+        
+        # Final layer to output dimension
+        layers.append(nn.Linear(current_dim, output_dim))
+        
+        self.mlp = nn.Sequential(*layers)
+        
+        # Final projections
         self.backbone_proj = nn.Linear(output_dim, output_dim)
         self.clip_proj = nn.Linear(output_dim, output_dim)
+        
+        # Initialize weights for better training
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize weights for better training stability"""
+        for module in self.mlp:
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        
+        # Initialize projection layers
+        nn.init.xavier_uniform_(self.backbone_proj.weight)
+        nn.init.xavier_uniform_(self.clip_proj.weight)
+        nn.init.zeros_(self.backbone_proj.bias)
+        nn.init.zeros_(self.clip_proj.bias)
     
     def forward(self, x, coords=None):
         batch_size = x.shape[0]
@@ -375,7 +410,6 @@ class BrainTransformer(nn.Module):
                     input_dim=model_args.decoder_hidden_dim,
                     output_dim=model_args.clip_emb_dim,
                     seq_len=model_args.clip_seq_dim,
-                    hidden_dim=model_args.decoder_hidden_dim // 2,
                     dropout=model_args.drop,
                 )
 
