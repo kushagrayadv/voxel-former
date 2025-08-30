@@ -17,9 +17,7 @@ class MindEye2Dataset(Dataset):
     def __init__(self, args, data_type, split='train', is_mni_data=False):
         self.data_type = data_type
         self.is_mni_data = is_mni_data
-        self.mni_data_path = args.mni_data_path
         self.dataset, subj_list = load_web_dataset(args, split)
-        self.reg_volumes = load_mni_data(args, subj_list, data_type) if is_mni_data else None
         self.voxels, self.num_voxels = load_voxels(args, subj_list, data_type)
         self.images = load_images(args)
         self.samples = list(iter(self.dataset))
@@ -30,7 +28,6 @@ class MindEye2Dataset(Dataset):
             coords = torch.nonzero(mask, as_tuple=False).float()
             self.coords[f'subj0{subj}'] = coords
 
-        print("__init__", self.reg_volumes)
     
     def __len__(self):
         return len(self.samples)
@@ -48,7 +45,7 @@ class MindEye2Dataset(Dataset):
         
         # Check if the data is MNI conditioned data
         if self.is_mni_data:
-            reg_data = self.reg_volumes.get((subj_key, voxel_id), None)
+            reg_data = load_mni_data(args, subj_key, voxel_id, self.data_type)
             
             if reg_data is not None:
                 mask = reg_data != 0
@@ -165,27 +162,23 @@ def load_images(args):
     images = f['images']
     return images
 
-def load_mni_data(args, subj_list, data_type):
-    reg_volumes = {}
-    for subj in subj_list:
-        print("Loading MNI data for subject", subj)
-        subj_key = f'subj0{subj}'
-        search_globs = os.path.join(args.mni_data_path, f'Subj0{subj}', 'batch*', f'condition_*_MNI.nii.gz')
-        matches = glob(search_globs)
-        for i, fpath in tqdm(enumerate(matches), total=len(matches)):
-            fname = os.path.basename(fpath)
-            match = re.match(r'condition_(\d+)_MNI.nii.gz', fname)
-            if match:
-                try:
-                    voxel_id = int(match.group(1)) - 1
-                    nii_data = nib.load(fpath).get_fdata().astype(np.float32)
-                    data = torch.from_numpy(nii_data).to(data_type)
-                    reg_volumes[(subj_key, voxel_id)] = data
-                except Exception as e:
-                    print(f"Error loading MNI data for {subj_key} {voxel_id}: {e}")
-                    pass
+def load_mni_data(args, subj_key, voxel_id, data_type):
+    print("Loading MNI data for subject", subj_key)
+    fpath = os.path.join(args.mni_data_path, f'subj0{subj_key}', f'subj0{subj_key}_condition_{voxel_id}_registered_to_mni.nii.gz')
+    match = glob(fpath)
 
-    return reg_volumes
+    if len(match) == 0:
+        print(f"No MNI data found for {subj_key} {voxel_id}")
+        return None
+    
+    try:
+        nii_data = nib.load(fpath).get_fdata().astype(np.float32)
+        data = torch.from_numpy(nii_data).to(data_type)
+    except Exception as e:
+        print(f"Error loading MNI data for {subj_key} {voxel_id}: {e}")
+        return None
+
+    return data
 
 def custom_collate_fn(batch):
     images, voxels, subjects, coords, image_idx = zip(*batch)
@@ -197,9 +190,25 @@ def custom_collate_fn(batch):
 
     return images, voxels, subjects, coords, image_idx
 
+class Args:
+    def __init__(self, **kwargs):
+        self.data_path = "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
+        self.cache_dir = "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
+        self.mni_data_path = "/scratch/ky2684/shared-datasets/nsd-mni-dataset/"
+
+        # Subject and session info
+        self.subj = 2
+        self.num_sessions = 40
+
+        # Multi-subject (list of subject IDs)
+        self.multi_subject = [2, 3, 4, 5, 6, 7, 8]
+
+        # Whether to use the new test set
+        self.new_test = True
+
 if __name__ == "__main__":
-    from Train import parse_arguments
-    args = parse_arguments()
+    args = Args()
+    
     data_type = torch.float16
 
     batch_size = 32
@@ -210,4 +219,5 @@ if __name__ == "__main__":
     
     for i, (images, voxels, subjects, coords, image_idx) in enumerate(dataloader):
         print(images.shape, voxels.shape, subjects.shape, coords.shape, image_idx.shape)
+        break
     
