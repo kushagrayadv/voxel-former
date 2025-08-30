@@ -18,7 +18,7 @@ train_logs/
 # ckpt
 pretraining/ckpt/
 pretraining/wandb/
-Downstream/ckpts/
+src/ckpts/
 
 # test files
 **/test*
@@ -80,4 +80,4 @@ slurm-raw/
 cache_dir/
 **/plots/
 
-Downstream/outputs/
+src/outputs/
