@@ -359,6 +359,9 @@ def train(args: DictConfig, model, diffusion_prior, train_dl, test_dl, accelerat
         
         iter_progress = tqdm(train_dl, desc=f'Epoch {epoch}', leave=False, disable=not accelerator.is_local_main_process)
         for train_i, (images, voxels, subj_idx, coords, image_idx) in enumerate(iter_progress):
+            if voxels is None:
+                continue
+
             blurry_pixcorr_per_iter = 0
             recon_cossim_per_iter = 0
             recon_mse_per_iter = 0

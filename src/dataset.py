@@ -45,18 +45,17 @@ class MindEye2Dataset(Dataset):
         
         # Check if the data is MNI conditioned data
         if self.is_mni_data:
-            reg_data = load_mni_data(args, subj_key, voxel_id, self.data_type)
+            reg_data, reg_mask = load_mni_data(args, subj_key, voxel_id, self.data_type)
             
-            if reg_data is not None:
-                mask = reg_data != 0
-                coord = torch.nonzero(mask, as_tuple=False).float()
-                voxel = reg_data[mask][voxel_id].view(1, -1)
+            if reg_data is not None and reg_mask is not None:
+                coord = torch.nonzero(reg_mask, as_tuple=False).float()
+                voxel = reg_data[reg_mask].view(1, -1)
             else:
-                voxel = self.voxels[subj_key][voxel_id].view(1,-1)
+                return image, voxel, subj_id, coord, image_id
         else:
             voxel = self.voxels[subj_key][voxel_id].view(1,-1)
 
-
+        print("voxel", voxel.shape, coord.shape, reg_data.shape, reg_mask.shape)
         # Print device information for debugging
         return image, voxel, subj_id, coord, image_id
 
@@ -163,8 +162,7 @@ def load_images(args):
     return images
 
 def load_mni_data(args, subj_key, voxel_id, data_type):
-    print("Loading MNI data for subject", subj_key)
-    fpath = os.path.join(args.mni_data_path, f'subj0{subj_key}', f'subj0{subj_key}_condition_{voxel_id}_registered_to_mni.nii.gz')
+    fpath = os.path.join(args.mni_data_path, f'{subj_key}', f'{subj_key}_condition_{voxel_id}_registered_to_mni.nii.gz')
     match = glob(fpath)
 
     if len(match) == 0:
@@ -178,7 +176,16 @@ def load_mni_data(args, subj_key, voxel_id, data_type):
         print(f"Error loading MNI data for {subj_key} {voxel_id}: {e}")
         return None
 
-    return data
+    mask_file_path = os.path.join(args.mni_mask_path, f'{subj_key}', f'{subj_key}_mask_registered_to_mni.nii.gz')
+    match = glob(mask_file_path)
+    if len(match) == 0:
+        print(f"No MNI mask data found for {subj_key} {voxel_id}")
+        return None
+    
+    mask = nib.load(mask_file_path).get_fdata().astype(np.float32)
+    mask = torch.from_numpy(mask).to(torch.bool)
+    
+    return data, mask
 
 def custom_collate_fn(batch):
     images, voxels, subjects, coords, image_idx = zip(*batch)
@@ -195,6 +202,7 @@ class Args:
         self.data_path = "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
         self.cache_dir = "/scratch/cl6707/Shared_Datasets/NSD_MindEye/Mindeye2"
         self.mni_data_path = "/scratch/ky2684/shared-datasets/nsd-mni-dataset/"
+        self.mni_mask_path = "/scratch/ky2684/shared-datasets/nsd-mni-mask/"
 
         # Subject and session info
         self.subj = 2
@@ -211,9 +219,9 @@ if __name__ == "__main__":
     
     data_type = torch.float16
 
-    batch_size = 32
+    batch_size = 8
 
-    train_data = MindEye2Dataset(args, data_type, 'train')
+    train_data = MindEye2Dataset(args, data_type, 'train', is_mni_data=True)
     sampler = SubjectBatchSampler(train_data, batch_size)
     dataloader = DataLoader(train_data, batch_sampler=sampler, collate_fn=custom_collate_fn, num_workers=8, pin_memory=True)
     
